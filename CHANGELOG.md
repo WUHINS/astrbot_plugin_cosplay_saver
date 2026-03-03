@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.9] - 2026-03-03
+- WebUI 新增白天/黑夜主题切换
+- 登录页重新设计，添加动画效果
+- 修复登录页渲染 bug
+
 ## [2.3.8] - 2026-03-02
 - 修复bug
 - 新增 QA 上下文情绪分析：将用户消息与 LLM 回复组成 Q/A 上下文，提升情绪识别准确度

@@ -2,435 +2,683 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>亨利的战利品 - 表情包管理</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="web/app.css">
 </head>
 <body>
-    <div id="app" class="min-h-screen flex flex-col p-4 md:p-8 max-w-[1600px] mx-auto">
-        <div v-if="!isAuthed" class="flex-1 flex items-center justify-center">
-            <div class="codex-panel p-8 w-full max-w-md">
-                <h2 class="text-2xl m-0 mb-6">WebUI 登录</h2>
-                <div v-if="authChecking" class="flex flex-col justify-center items-center py-10">
-                    <div class="spinner mb-4"></div>
-                    <p class="text-gold font-cinzel tracking-widest animate-pulse">Checking...</p>
+    <div id="app">
+        <!-- Login Screen -->
+        <div v-if="!isAuthed" class="login-overlay">
+            <!-- Background Decorations -->
+            <div class="login-bg-decoration">
+                <div class="floating-icon icon-1">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
                 </div>
-                <div v-else-if="!authRequired" class="py-8 text-center text-muted">
-                    未启用鉴权，正在进入...
+                <div class="floating-icon icon-2">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
                 </div>
-                <div v-else class="space-y-4">
-                    <div>
-                        <label class="block text-sm text-muted mb-2">访问密码</label>
-                        <div class="flex gap-2">
-                            <input
-                                v-model="loginToken"
-                                :type="showPassword ? 'text' : 'password'"
-                                placeholder="请输入密码"
-                                class="codex-input flex-1"
-                                @keydown.enter="submitLogin"
-                            >
-                            <button
-                                type="button"
-                                class="codex-btn h-[42px] px-4 text-sm"
-                                @click="showPassword = !showPassword"
-                            >
-                                <span v-if="showPassword">隐藏</span>
-                                <span v-else>显示</span>
-                            </button>
-                        </div>
-                        <div class="text-xs text-muted mt-2 leading-relaxed">
-                            密码来自插件配置项 webui_password；留空时会自动生成并在日志里提示。会话超时：{{ Math.round(sessionTimeout / 60) }} 分钟
-                        </div>
-                    </div>
-                    <div v-if="loginError" class="text-red-400 text-sm">{{ loginError }}</div>
-                    <button @click="submitLogin" class="codex-btn primary w-full justify-center">登录</button>
+                <div class="floating-icon icon-3">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                    </svg>
                 </div>
-            </div>
-        </div>
-
-        <div v-else>
-        <!-- Header -->
-        <header class="codex-panel p-6 mb-8 flex flex-col md:flex-row justify-between items-center gap-6">
-            <div class="flex items-center gap-5">
-                <div class="w-20 h-20 bg-black border-2 border-amber-900/60 flex items-center justify-center shadow-inner relative group overflow-hidden">
-                    <div class="absolute inset-0 bg-gradient-to-br from-amber-900/20 to-transparent"></div>
-                    <svg class="w-12 h-12 text-amber-600 drop-shadow-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="floating-icon icon-4">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                     </svg>
                 </div>
-                <div>
-                    <h1 class="text-4xl m-0 border-none p-0 text-gold shadow-black drop-shadow-md">亨利的战利品</h1>
-                    <p class="text-amber-700/80 uppercase tracking-[0.2em] text-sm font-bold mt-1">Henry's Loot - Codex</p>
+            </div>
+
+            <div class="login-panel">
+                <div class="login-panel-corner login-panel-corner-tl"></div>
+                <div class="login-panel-corner login-panel-corner-tr"></div>
+                <div class="login-panel-corner login-panel-corner-bl"></div>
+                <div class="login-panel-corner login-panel-corner-br"></div>
+                
+                <!-- Logo Section -->
+                <div class="login-logo">
+                    <div class="login-logo-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                        </svg>
+                    </div>
+                    <h1 class="login-title">亨利的战利品</h1>
+                    <p class="login-subtitle">表情包管理面板</p>
+                </div>
+                
+                <div v-if="authChecking" class="login-loading">
+                    <div class="login-spinner">
+                        <div class="login-spinner-ring"></div>
+                        <div class="login-spinner-ring"></div>
+                        <div class="login-spinner-ring"></div>
+                    </div>
+                    <p class="login-loading-text">验证身份中...</p>
+                </div>
+                
+                <div v-else-if="!authRequired" class="login-success">
+                    <div class="login-success-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </div>
+                    <p class="login-success-text">验证通过</p>
+                    <p class="login-success-subtext">正在进入...</p>
+                </div>
+                
+                <div v-else class="login-form">
+                    <div class="login-form-header">
+                        <div class="login-lock-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke-width="2"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11V7a5 5 0 0110 0v4"/>
+                            </svg>
+                        </div>
+                        <p class="login-form-title">请输入访问密码</p>
+                    </div>
+
+                    <div class="login-input-group">
+                        <div class="login-input-wrapper">
+                            <input 
+                                v-model="loginToken" 
+                                :type="showPassword ? 'text' : 'password'"
+                                placeholder="输入密码..."
+                                class="login-input"
+                                @keydown.enter="submitLogin"
+                            >
+                            <button @click="showPassword = !showPassword" class="login-input-toggle">
+                                <svg v-if="showPassword" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/>
+                                </svg>
+                                <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <p class="login-session-info">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 14px; height: 14px; vertical-align: middle; margin-right: 4px;">
+                                <circle cx="12" cy="12" r="10" stroke-width="2"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6l4 2"/>
+                            </svg>
+                            会话有效期：{{ Math.round(sessionTimeout / 60) }} 分钟
+                        </p>
+                    </div>
+                    
+                    <div v-if="loginError" class="login-error">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 18px; height: 18px; margin-right: 8px;">
+                            <circle cx="12" cy="12" r="10" stroke-width="2"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01"/>
+                        </svg>
+                        {{ loginError }}
+                    </div>
+                    
+                    <button @click="submitLogin" class="login-submit-btn" :class="{ 'is-loading': false }">
+                        <span class="login-submit-text">进入系统</span>
+                        <svg class="login-submit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/>
+                        </svg>
+                    </button>
                 </div>
             </div>
-
-            <div class="flex gap-4">
-                <button @click="openUploadModal" class="codex-btn primary">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-                    添加藏品
-                </button>
-                <button @click="openEmotionsModal" class="codex-btn">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-                    管理分类
-                </button>
-                <button v-if="authRequired" @click="logout" class="codex-btn">
-                    退出登录
-                </button>
-            </div>
-        </header>
-
-        <!-- Stats -->
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <div class="codex-panel p-4 text-center group hover:border-amber-700/50 transition-colors">
-                <div class="text-4xl font-cinzel text-gold group-hover:text-bright transition-colors">{{ stats.total || 0 }}</div>
-                <div class="text-xs text-muted uppercase tracking-widest mt-2 border-t border-white/10 pt-2 inline-block px-4">总藏品</div>
-            </div>
-            <div class="codex-panel p-4 text-center group hover:border-amber-700/50 transition-colors">
-                <div class="text-4xl font-cinzel text-gold group-hover:text-bright transition-colors">{{ stats.categories || 0 }}</div>
-                <div class="text-xs text-muted uppercase tracking-widest mt-2 border-t border-white/10 pt-2 inline-block px-4">分类数</div>
-            </div>
-            <div class="codex-panel p-4 text-center group hover:border-amber-700/50 transition-colors">
-                <div class="text-4xl font-cinzel text-gold group-hover:text-bright transition-colors">{{ stats.today || 0 }}</div>
-                <div class="text-xs text-muted uppercase tracking-widest mt-2 border-t border-white/10 pt-2 inline-block px-4">今日新增</div>
-            </div>
-            <div class="codex-panel p-4 text-center group hover:border-amber-700/50 transition-colors">
-                <div class="text-4xl font-cinzel text-gold group-hover:text-bright transition-colors">{{ Math.round((stats.total || 0) / (stats.categories || 1)) }}</div>
-                <div class="text-xs text-muted uppercase tracking-widest mt-2 border-t border-white/10 pt-2 inline-block px-4">平均每类</div>
-            </div>
         </div>
 
-        <!-- Search Toolbar -->
-        <div class="codex-panel p-5 mb-8 flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div class="relative w-full md:w-96">
-                <input v-model="searchQuery" @input="debouncedSearch" placeholder="搜索战利品 (标签/描述)..." class="codex-input pl-10 text-sm">
-                <svg class="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-            </div>
-            
-            <div class="flex items-center gap-3 w-full md:w-auto">
-                <select v-model="selectedCategory" @change="fetchImages(1)" class="codex-input w-full md:w-40 text-sm h-[42px]">
-                    <option value="">所有分类</option>
-                    <option v-for="cat in categories" :key="cat.key" :value="cat.key">{{ cat.name }} ({{ cat.count }})</option>
-                </select>
-
-                <select v-model="sortBy" @change="fetchImages(1)" class="codex-input w-full md:w-40 text-sm h-[42px]">
-                    <option value="newest">最新获取</option>
-                    <option value="oldest">最早获取</option>
-                </select>
-                
-                <button @click="toggleBatchMode" class="codex-btn text-sm h-[42px] whitespace-nowrap" :class="{'border-gold-bright text-gold-bright': isBatchMode}">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
-                    <span>{{ isBatchMode ? '退出批量' : '批量' }}</span>
-                </button>
-            </div>
-        </div>
-
-        <!-- Gallery -->
-        <div v-if="loading" class="flex flex-col justify-center items-center py-20">
-            <div class="spinner mb-4"></div>
-            <p class="text-gold font-cinzel tracking-widest animate-pulse">Loading Artifacts...</p>
-        </div>
-
-        <div v-else-if="images.length > 0" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-5 mb-8">
-            <div v-for="img in images" :key="img.hash" 
-                 @click="isBatchMode ? toggleSelection(img) : openPreview(img)" 
-                 class="item-card cursor-pointer group flex flex-col h-full relative"
-                 :class="{'ring-2 ring-gold-bright shadow-[0_0_15px_rgba(212,180,110,0.5)]': selectedImages.has(img.hash)}">
-                
-                <!-- Batch Selection Indicator -->
-                <div v-if="isBatchMode" class="absolute top-2 right-2 z-10 w-6 h-6 rounded border border-gold bg-black/80 flex items-center justify-center transition-colors shadow-md"
-                     :class="{'bg-gold text-black': selectedImages.has(img.hash), 'opacity-50 hover:opacity-100': !selectedImages.has(img.hash)}">
-                    <svg v-if="selectedImages.has(img.hash)" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                </div>
-
-                <div class="aspect-square relative overflow-hidden" style="background: var(--bg-main)">
-                    <img :src="img.url" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500" loading="lazy">
-                    <div class="absolute top-0 left-0 right-0 p-2 bg-gradient-to-b from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span class="text-[10px] text-gold uppercase tracking-wider border border-gold/30 px-2 py-0.5 bg-black/50">{{ img.category }}</span>
+        <!-- Main Application -->
+        <template v-else>
+            <!-- Header -->
+            <header class="codex-header">
+                <div class="header-title">
+                    <div class="header-icon">
+                        <svg style="width: 28px; height: 28px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                        </svg>
+                    </div>
+                    <div class="header-text">
+                        <h1>亨利的战利品</h1>
+                        <p>表情包小偷管理面板</p>
                     </div>
                 </div>
-                <div class="p-3 border-t border-[#222] flex-grow" style="background: var(--bg-panel)">
-                    <p class="text-sm text-gray-400 truncate group-hover:text-gold transition-colors">{{ img.desc || '未命名藏品' }}</p>
+                
+                <div class="stats-bar">
+                    <div class="stat-item">
+                        <span class="stat-value">{{ stats.total || 0 }}</span>
+                        <span class="stat-label">总数</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">{{ stats.categories || 0 }}</span>
+                        <span class="stat-label">分类</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value">{{ stats.today || 0 }}</span>
+                        <span class="stat-label">今日新增</span>
+                    </div>
                 </div>
+                
+                <!-- Theme Toggle -->
+                <button 
+                    @click="toggleTheme" 
+                    class="theme-toggle" 
+                    :title="isDarkTheme ? '切换到白天模式' : '切换到黑夜模式'"
+                    :class="{ 'is-dark': isDarkTheme }"
+                >
+                    <div class="theme-icon-wrapper">
+                        <svg 
+                            v-if="isDarkTheme" 
+                            class="sun-icon" 
+                            viewBox="0 0 24 24" 
+                            fill="none" 
+                            stroke="currentColor"
+                        >
+                            <circle cx="12" cy="12" r="4" stroke-width="2"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                        </svg>
+                        <svg 
+                            v-else 
+                            class="moon-icon" 
+                            viewBox="0 0 24 24" 
+                            fill="none" 
+                            stroke="currentColor"
+                        >
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 3v2M19 6h2" opacity="0.5"/>
+                        </svg>
+                    </div>
+                    <div class="theme-glow"></div>
+                </button>
+            </header>
+
+            <!-- Main Container -->
+            <div class="main-container">
+                <!-- Sidebar - Categories -->
+                <aside class="sidebar">
+                    <div class="sidebar-title">分类</div>
+                    <div class="category-list">
+                        <div 
+                            class="category-item" 
+                            :class="{ active: selectedCategory === '' }"
+                            @click="selectedCategory = ''; fetchImages(1)"
+                        >
+                            <span class="category-name">全部</span>
+                            <span class="category-count">{{ stats.total || 0 }}</span>
+                        </div>
+                        <div 
+                            v-for="cat in categories" 
+                            :key="cat.key"
+                            class="category-item"
+                            :class="{ active: selectedCategory === cat.key }"
+                            @click="selectedCategory = cat.key; fetchImages(1)"
+                        >
+                            <span class="category-name">{{ cat.name }}</span>
+                            <span class="category-count">{{ cat.count }}</span>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Inventory Panel -->
+                <main class="inventory-panel">
+                    <div class="modal-panel-corner-bl"></div>
+                    <div class="modal-panel-corner-br"></div>
+                    
+                    <!-- Toolbar -->
+                    <div class="inventory-toolbar">
+                        <div class="toolbar-search">
+                            <svg style="width: 16px; height: 16px; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                            <input 
+                                v-model="searchQuery" 
+                                @input="debouncedSearch"
+                                placeholder="搜索表情包..."
+                            >
+                        </div>
+                        
+                        <div class="toolbar-actions">
+                            <select v-model="sortBy" @change="fetchImages(1)" class="codex-input" style="width: 140px;">
+                                <option value="newest">最新</option>
+                                <option value="oldest">最早</option>
+                            </select>
+                            
+                            <button @click="toggleBatchMode" class="codex-btn" :class="{ primary: isBatchMode }">
+                                <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                                </svg>
+                                {{ isBatchMode ? '完成' : '批量' }}
+                            </button>
+                            
+                            <button @click="openEmotionsModal" class="codex-btn">
+                                <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+                                </svg>
+                                分类
+                            </button>
+                            
+                            <button @click="openUploadModal" class="codex-btn primary">
+                                <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                                添加
+                            </button>
+                            
+                            <button v-if="authRequired" @click="logout" class="codex-btn icon-btn" title="退出">
+                                <svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Loading State -->
+                    <div v-if="loading" class="loading-state">
+                        <div class="spinner"></div>
+                        <p style="color: var(--gold-primary); font-family: 'Cinzel', serif; letter-spacing: 0.1em;">加载中...</p>
+                    </div>
+                    
+                    <!-- Empty State -->
+                    <div v-else-if="images.length === 0" class="empty-state">
+                        <svg style="width: 64px; height: 64px; opacity: 0.3; margin-bottom: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                        </svg>
+                        <p style="font-family: 'Cinzel', serif; font-size: 1.125rem;">暂无表情包</p>
+                        <p style="font-size: 0.875rem; margin-top: 8px; color: var(--text-muted);">点击"添加"上传新的表情包</p>
+                    </div>
+                    
+                    <!-- Inventory Grid -->
+                    <div v-else class="inventory-grid">
+                        <div 
+                            v-for="img in images" 
+                            :key="img.hash"
+                            class="item-slot"
+                            :class="{ selected: selectedImages.has(img.hash) }"
+                            @click="isBatchMode ? toggleSelection(img) : openPreview(img)"
+                        >
+                            <div v-if="isBatchMode" class="batch-indicator">
+                                <svg v-if="selectedImages.has(img.hash)" style="width: 12px; height: 12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/>
+                                </svg>
+                            </div>
+                            
+                            <div class="item-image">
+                                <img :src="img.url" loading="lazy" :alt="img.desc">
+                            </div>
+                            
+                            <div class="item-info">
+                                <div class="item-category">{{ img.category }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    <div v-if="total > pageSize" class="pagination-bar">
+                        <button 
+                            @click="prevPage" 
+                            :disabled="currentPage === 1"
+                            class="codex-btn"
+                            :class="{ disabled: currentPage === 1 }"
+                        >
+                            <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                            </svg>
+                            上一页
+                        </button>
+                        
+                        <span class="page-info">{{ currentPage }} / {{ Math.ceil(total / pageSize) }}</span>
+                        
+                        <button 
+                            @click="nextPage" 
+                            :disabled="currentPage * pageSize >= total"
+                            class="codex-btn"
+                            :class="{ disabled: currentPage * pageSize >= total }"
+                        >
+                            下一页
+                            <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                            </svg>
+                        </button>
+                    </div>
+                </main>
             </div>
-        </div>
 
-        <div v-else class="text-center py-24 text-gray-500 border-2 border-dashed border-[#222] rounded-lg" style="background: var(--bg-main)">
-            <svg class="w-16 h-16 mx-auto mb-4 opacity-30 text-amber-800" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-            <p class="text-xl font-cinzel text-amber-900/50">暂无相关藏品</p>
-        </div>
-
-        <!-- Pagination -->
-        <div v-if="total > pageSize" class="flex justify-center items-center gap-8 mt-auto py-8 border-t border-white/5">
-            <button @click="prevPage" :disabled="currentPage === 1" class="codex-btn disabled:opacity-30 disabled:cursor-not-allowed">
-                <span class="text-lg mr-1">«</span> 上一页
-            </button>
-            <span class="font-cinzel text-gold text-lg tracking-widest">Page {{ currentPage }} / {{ Math.ceil(total / pageSize) }}</span>
-            <button @click="nextPage" :disabled="currentPage * pageSize >= total" class="codex-btn disabled:opacity-30 disabled:cursor-not-allowed">
-                下一页 <span class="text-lg ml-1">»</span>
-            </button>
-        </div>
-
-        <!-- Preview Modal -->
-        <div v-if="previewOpen" class="fixed inset-0 z-50 modal-overlay flex items-center justify-center p-2 sm:p-4" @click.self="closePreview">
-            <div class="modal-content w-full max-w-6xl flex flex-col lg:flex-row max-h-[95vh] sm:max-h-[90vh] overflow-hidden">
-                <!-- 图片预览区 - 移动端优先显示 -->
-                <div class="w-full lg:w-2/3 bg-black/80 flex items-center justify-center relative p-2 sm:p-4 lg:p-8 border-b lg:border-b-0 lg:border-r border-amber-900/30 group min-h-[200px] sm:min-h-[300px] lg:min-h-0 lg:h-auto">
-                    <button @click.stop="prevImage" class="nav-btn left-2 sm:left-4 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity" v-if="images.length > 1">
-                        <svg class="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-                    </button>
+            <!-- Item Detail Modal -->
+            <div v-if="previewOpen" class="modal-overlay" @click.self="closePreview">
+                <div class="modal-panel">
+                    <div class="modal-panel-corner-bl"></div>
+                    <div class="modal-panel-corner-br"></div>
                     
-                    <img :src="previewItem?.url" class="max-w-full max-h-[40vh] sm:max-h-[60vh] lg:max-h-[80vh] shadow-[0_0_30px_rgba(0,0,0,0.8)] border border-[#333]">
-                    
-                    <button @click.stop="nextImage" class="nav-btn right-2 sm:right-4 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity" v-if="images.length > 1">
-                        <svg class="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                    </button>
-                    
-                    <button @click="closePreview" class="absolute top-2 right-2 sm:top-4 sm:right-4 lg:top-6 lg:right-6 text-gray-400 hover:text-gold hover:rotate-90 transition-all duration-300 bg-black/50 p-2 rounded-full border border-transparent hover:border-gold z-10">
-                        <svg class="w-6 h-6 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                    </button>
-                </div>
-                <!-- 详情/编辑区 - 移动端可滚动 -->
-                <div class="w-full lg:w-1/3 flex flex-col max-h-[50vh] lg:max-h-none" style="background: var(--bg-modal)">
-                    <div class="modal-header flex justify-between items-center flex-shrink-0">
-                        <h3 class="text-lg sm:text-2xl m-0">{{ isEditing ? '编辑藏品' : '藏品详情' }}</h3>
-                        <button v-if="!isEditing" @click="startEdit" class="text-gold hover:text-white transition-colors p-2">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                    <div class="modal-header">
+                        <h2>{{ isEditing ? '编辑' : '详情' }}</h2>
+                        <button @click="closePreview" class="modal-close">
+                            <svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
                         </button>
                     </div>
                     
-                    <div v-if="!isEditing" class="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 lg:space-y-8 flex-grow overflow-y-auto custom-scrollbar">
-                        <div>
-                            <label class="text-xs uppercase text-amber-700 font-bold tracking-[0.15em] sm:tracking-[0.2em] block mb-1 sm:mb-2">分类</label>
-                            <span class="text-lg sm:text-2xl text-gold font-serif border-b border-amber-900/30 pb-1 inline-block pr-4 sm:pr-8">{{ previewItem?.category }}</span>
-                        </div>
-                        <div>
-                            <label class="text-xs uppercase text-amber-700 font-bold tracking-[0.15em] sm:tracking-[0.2em] block mb-1 sm:mb-2">描述</label>
-                            <p class="text-gray-300 leading-relaxed font-serif text-base sm:text-lg italic pl-3 sm:pl-4 border-l-2 border-amber-900/50">
-                                "{{ previewItem?.desc || '暂无描述' }}"
-                            </p>
-                        </div>
-                        <div>
-                            <label class="text-xs uppercase text-amber-700 font-bold tracking-[0.15em] sm:tracking-[0.2em] block mb-1 sm:mb-2">标签</label>
-                            <div class="flex flex-wrap gap-1.5 sm:gap-2">
-                                <span v-for="tag in (previewItem?.tags || [])" :key="tag" class="px-2 sm:px-3 py-0.5 sm:py-1 bg-amber-900/20 border border-amber-900/40 text-amber-500 text-xs sm:text-sm font-serif">#{{ tag }}</span>
+                    <div class="modal-content">
+                        <div v-if="!isEditing" class="item-detail">
+                            <!-- Image Preview -->
+                            <div class="item-preview">
+                                <button 
+                                    v-if="images.length > 1" 
+                                    @click.stop="prevImage" 
+                                    class="nav-btn left"
+                                >
+                                    <svg style="width: 24px; height: 24px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                                    </svg>
+                                </button>
+                                
+                                <img :src="previewItem?.url" :alt="previewItem?.desc">
+                                
+                                <button 
+                                    v-if="images.length > 1" 
+                                    @click.stop="nextImage" 
+                                    class="nav-btn right"
+                                >
+                                    <svg style="width: 24px; height: 24px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            
+                            <!-- Stats Panel -->
+                            <div class="item-stats">
+                                <div class="stat-row">
+                                    <span class="stat-name">分类</span>
+                                    <span class="stat-value">{{ previewItem?.category }}</span>
+                                </div>
+                                
+                                <div class="stat-row">
+                                    <span class="stat-name">描述</span>
+                                </div>
+                                <div style="padding: 12px; background: rgba(0,0,0,0.3); margin-bottom: 12px; border-left: 3px solid var(--gold-dim);">
+                                    <p style="margin: 0; color: var(--text-main); font-style: italic;">
+                                        {{ previewItem?.desc || '暂无描述' }}
+                                    </p>
+                                </div>
+                                
+                                <div class="stat-row">
+                                    <span class="stat-name">标签</span>
+                                </div>
+                                <div class="item-tags" style="margin-bottom: 12px;">
+                                    <span v-for="tag in (previewItem?.tags || [])" :key="tag" class="tag">
+                                        {{ tag }}
+                                    </span>
+                                    <span v-if="!(previewItem?.tags || []).length" style="font-size: 0.85rem; color: var(--text-muted);">无标签</span>
+                                </div>
+                                
+                                <div class="stat-row">
+                                    <span class="stat-name">添加时间</span>
+                                    <span class="stat-value">{{ formatDate(previewItem?.created_at) }}</span>
+                                </div>
+                                
+                                <div class="stat-row">
+                                    <span class="stat-name">ID</span>
+                                    <span class="stat-value" style="font-size: 0.75rem; word-break: break-all;">{{ previewItem?.hash?.slice(0, 16) }}...</span>
+                                </div>
                             </div>
                         </div>
-                        <div class="text-xs text-gray-600 font-mono mt-2 sm:mt-4 pt-2 sm:pt-4 border-t border-white/5">
-                            HASH: <span class="text-gray-500 text-[10px] sm:text-xs break-all">{{ previewItem?.hash }}</span>
+                        
+                        <!-- Edit Form -->
+                        <div v-else style="padding: 24px; width: 100%;">
+                            <div style="max-width: 500px; margin: 0 auto;">
+                                <div style="margin-bottom: 20px;">
+                                    <label style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); display: block; margin-bottom: 8px;">分类</label>
+                                    <select v-model="editForm.category" class="codex-input">
+                                        <option v-for="cat in categories" :key="cat.key" :value="cat.key">{{ cat.name }}</option>
+                                    </select>
+                                </div>
+                                
+                                <div style="margin-bottom: 20px;">
+                                    <label style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); display: block; margin-bottom: 8px;">描述</label>
+                                    <textarea v-model="editForm.desc" class="codex-input" rows="3"></textarea>
+                                </div>
+                                
+                                <div style="margin-bottom: 20px;">
+                                    <label style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); display: block; margin-bottom: 8px;">标签 (逗号分隔)</label>
+                                    <input v-model="editForm.tags" type="text" class="codex-input" placeholder="例如: 可爱, 搞怪, 稀有">
+                                </div>
+                            </div>
                         </div>
                     </div>
-
-                    <div v-else class="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 flex-grow overflow-y-auto custom-scrollbar">
-                        <div>
-                            <label class="text-xs uppercase text-amber-700 font-bold tracking-[0.15em] sm:tracking-[0.2em] block mb-1 sm:mb-2">分类</label>
-                            <select v-model="editForm.category" class="codex-input w-full text-base sm:text-lg">
-                                <option v-for="cat in categories" :key="cat.key" :value="cat.key">{{ cat.name }}</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="text-xs uppercase text-amber-700 font-bold tracking-[0.15em] sm:tracking-[0.2em] block mb-1 sm:mb-2">描述</label>
-                            <textarea v-model="editForm.desc" rows="3" class="codex-input w-full resize-none text-base sm:text-lg"></textarea>
-                        </div>
-                        <div>
-                            <label class="text-xs uppercase text-amber-700 font-bold tracking-[0.15em] sm:tracking-[0.2em] block mb-1 sm:mb-2">标签 (逗号分隔)</label>
-                            <input v-model="editForm.tags" type="text" class="codex-input w-full text-base sm:text-lg" placeholder="e.g. rare, weapon, gold">
-                        </div>
-                    </div>
-
-                    <!-- 操作按钮区 - 移动端优化 -->
-                    <div class="p-3 sm:p-4 lg:p-6 border-t border-amber-900/30 flex flex-col gap-2 sm:gap-3 flex-shrink-0" style="background: var(--bg-main)">
-                        <div v-if="!isEditing" class="flex flex-col gap-2 sm:gap-3">
-                            <a :href="previewItem?.url" target="_blank" class="codex-btn text-center justify-center w-full py-2.5 sm:py-3 text-sm sm:text-base">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                                下载原图
+                    
+                    <div class="modal-actions">
+                        <template v-if="!isEditing">
+                            <a :href="previewItem?.url" target="_blank" class="codex-btn" style="flex: 1;">
+                                <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                                </svg>
+                                下载
                             </a>
-                            <button @click="deleteImage(previewItem)" class="codex-btn text-center justify-center w-full py-2.5 sm:py-3 text-sm sm:text-base text-red-500 border-red-900/30 hover:border-red-500 hover:bg-red-900/10">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                销毁此物
+                            <button @click="startEdit" class="codex-btn" style="flex: 1;">
+                                <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                </svg>
+                                编辑
                             </button>
-                            <button @click="deleteImage(previewItem, true)" class="codex-btn text-center justify-center w-full py-2.5 sm:py-3 text-sm sm:text-base text-red-400 border-red-900/20 hover:border-red-500 hover:bg-red-900/20">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
-                                永不再偷
+                            <button @click="deleteImage(previewItem)" class="codex-btn danger" style="flex: 1;">
+                                <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                                删除
                             </button>
-                        </div>
-                        <div v-else class="flex gap-2 sm:gap-3">
-                            <button @click="saveEdit" class="codex-btn primary flex-1 py-2.5 sm:py-3 text-sm sm:text-base justify-center">保存</button>
-                            <button @click="cancelEdit" class="codex-btn flex-1 py-2.5 sm:py-3 text-sm sm:text-base justify-center">取消</button>
-                        </div>
+                            <button @click="deleteImage(previewItem, true)" class="codex-btn danger" style="flex: 1;" title="删除并加入黑名单">
+                                <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+                                </svg>
+                                拉黑
+                            </button>
+                        </template>
+                        <template v-else>
+                            <button @click="cancelEdit" class="codex-btn" style="flex: 1;">取消</button>
+                            <button @click="saveEdit" class="codex-btn primary" style="flex: 1;">保存</button>
+                        </template>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Upload Modal -->
-        <div v-if="uploadOpen" class="fixed inset-0 z-50 modal-overlay flex items-center justify-center p-4" @click.self="closeUploadModal">
-            <div class="modal-content w-full max-w-2xl max-h-[90vh] flex flex-col">
-                <div class="modal-header">
-                    <h2 class="text-2xl m-0">添加新藏品</h2>
-                    <button @click="closeUploadModal" class="text-gray-500 hover:text-gold transition-colors"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
-                </div>
-                
-                <form @submit.prevent="submitUpload" class="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 overflow-y-auto">
-                    <div>
-                        <label class="block text-gold mb-2 font-bold uppercase text-xs tracking-widest">选择图片</label>
-                        <div class="border-2 border-dashed border-amber-900/40 rounded p-4 sm:p-6 lg:p-8 text-center hover:border-gold transition-all cursor-pointer relative group min-h-[120px] sm:min-h-[160px] flex items-center justify-center" style="background: var(--bg-main)">
-                            <input type="file" accept="image/*" @change="handleFileSelect" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+            <!-- Upload Modal -->
+            <div v-if="uploadOpen" class="modal-overlay" @click.self="closeUploadModal">
+                <div class="modal-panel" style="max-width: 600px;">
+                    <div class="modal-panel-corner-bl"></div>
+                    <div class="modal-panel-corner-br"></div>
+                    
+                    <div class="modal-header">
+                        <h2>添加表情包</h2>
+                        <button @click="closeUploadModal" class="modal-close">
+                            <svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <form @submit.prevent="submitUpload" style="padding: 24px;">
+                        <div class="upload-area" @click="$refs.fileInput.click()">
+                            <input 
+                                ref="fileInput"
+                                type="file" 
+                                accept="image/*" 
+                                @change="handleFileSelect"
+                                style="display: none;"
+                            >
                             
-                            <div v-if="uploadPreviewUrl" class="flex flex-col sm:flex-row items-center gap-3 sm:gap-6">
-                                <img :src="uploadPreviewUrl" class="h-20 w-20 sm:h-24 sm:w-24 object-cover border border-gold shadow-lg">
-                                <div class="text-center sm:text-left">
-                                    <p class="text-white font-serif text-base sm:text-lg">{{ uploadFile?.name }}</p>
-                                    <p class="text-xs sm:text-sm text-gray-500 font-mono mt-1">{{ (uploadFile?.size / 1024).toFixed(1) }} KB</p>
-                                    <p class="text-xs text-green-500 mt-2 flex items-center justify-center sm:justify-start gap-1"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> 已就绪</p>
+                            <div v-if="uploadPreviewUrl" style="display: flex; align-items: center; gap: 20px;">
+                                <img :src="uploadPreviewUrl" class="upload-preview">
+                                <div style="text-align: left;">
+                                    <p style="margin: 0 0 8px 0; color: var(--gold-primary); font-family: 'Cinzel', serif;">{{ uploadFile?.name }}</p>
+                                    <p style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">{{ (uploadFile?.size / 1024).toFixed(1) }} KB</p>
                                 </div>
                             </div>
-                            <div v-else class="group-hover:text-gold transition-colors text-gray-500 flex flex-col items-center gap-2 sm:gap-3">
-                                <svg class="w-8 h-8 sm:w-10 sm:h-10 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                                <p class="text-base sm:text-lg font-serif">点击或拖拽以上传图像</p>
+                            
+                            <div v-else>
+                                <svg style="width: 48px; height: 48px; margin: 0 auto 16px auto; color: var(--gold-dim); opacity: 0.5; display: block;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                </svg>
+                                <p style="margin: 0; color: var(--text-muted); font-family: 'Cinzel', serif; text-align: center;">点击上传图片</p>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                        <div>
-                            <label class="block text-gold mb-2 font-bold uppercase text-xs tracking-widest">情绪分类 <span class="text-red-500">*</span></label>
-                            <select v-model="uploadForm.emotion" class="codex-input text-base" required>
-                                <option value="" class="text-gray-500">请选择...</option>
+                        
+                        <div style="margin-top: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <label style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted);">分类 *</label>
+                                <button 
+                                    v-if="uploadFile" 
+                                    type="button"
+                                    @click.prevent="analyzeImage"
+                                    :disabled="analyzing || !uploadFile"
+                                    class="codex-btn"
+                                    style="font-size: 0.7rem; padding: 6px 12px; min-height: auto;"
+                                >
+                                    <svg v-if="!analyzing" style="width: 14px; height: 14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                    <svg v-else style="width: 14px; height: 14px; animation: spin 1s linear infinite;" fill="none" viewBox="0 0 24 24">
+                                        <circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span v-if="analyzing">分析中...</span>
+                                    <span v-else>自动识别</span>
+                                </button>
+                            </div>
+                            <select v-model="uploadForm.emotion" class="codex-input" required>
+                                <option value="">请选择分类...</option>
                                 <option v-for="emo in availableEmotions" :key="emo.key" :value="emo.key">{{ emo.name || emo.key }}</option>
                             </select>
                         </div>
-                        <div>
-                            <label class="block text-gold mb-2 font-bold uppercase text-xs tracking-widest">标签</label>
-                            <input type="text" v-model="uploadForm.tags" placeholder="例如: 可爱, 搞怪" class="codex-input text-base">
+                        
+                        <div style="margin-top: 16px;">
+                            <label style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); display: block; margin-bottom: 8px;">标签</label>
+                            <input v-model="uploadForm.tags" type="text" class="codex-input" placeholder="例如: 可爱, 搞怪">
                         </div>
-                    </div>
-
-                    <div>
-                        <label class="block text-gold mb-2 font-bold uppercase text-xs tracking-widest">描述</label>
-                        <textarea v-model="uploadForm.desc" rows="2" placeholder="关于此藏品的详细描述..." class="codex-input resize-none text-base"></textarea>
-                    </div>
-
-                    <div v-if="uploadError" class="text-red-400 text-sm bg-red-900/10 p-2 sm:p-3 border border-red-900/30 flex items-center gap-2">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        <span class="break-all">{{ uploadError }}</span>
-                    </div>
-
-                    <div class="flex gap-2 sm:gap-4 pt-2 sm:pt-4 border-t border-white/5">
-                        <button type="button" @click="closeUploadModal" class="codex-btn flex-1 py-2.5 sm:py-3 text-sm sm:text-base opacity-80 hover:opacity-100">取消</button>
-                        <button type="submit" :disabled="uploading" class="codex-btn primary flex-1 py-2.5 sm:py-3 text-sm sm:text-base">
-                            <span v-if="uploading" class="flex items-center justify-center gap-2">
-                                <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                处理中...
-                            </span>
-                            <span v-else>确认入库</span>
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- Category Management Modal - 移动端适配 -->
-        <div v-if="emotionsOpen" class="fixed inset-0 z-50 modal-overlay flex items-center justify-center p-2 sm:p-4" @click.self="closeEmotionsModal">
-            <div class="modal-content w-full max-w-2xl max-h-[95vh] sm:max-h-[85vh] flex flex-col">
-                <div class="modal-header flex-shrink-0">
-                    <h2 class="text-xl sm:text-2xl m-0">分类管理</h2>
-                    <button @click="closeEmotionsModal" class="text-gray-500 hover:text-gold transition-colors p-2">
-                        <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                    </button>
-                </div>
-                
-                <!-- Add New Category Form - 移动端改为垂直布局 -->
-                <div class="p-3 sm:p-6 border-b border-amber-900/30 flex-shrink-0" style="background: var(--bg-panel)">
-                    <h3 class="text-gold text-xs sm:text-sm font-bold uppercase tracking-widest mb-3 sm:mb-4">新增分类</h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-4">
-                        <div class="sm:col-span-3">
-                            <input v-model="newEmotion.key" placeholder="Key (如: happy)" class="codex-input w-full text-sm font-mono">
+                        
+                        <div style="margin-top: 16px;">
+                            <label style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); display: block; margin-bottom: 8px;">描述</label>
+                            <textarea v-model="uploadForm.desc" class="codex-input" rows="2" placeholder="关于此表情包的描述..."></textarea>
                         </div>
-                        <div class="sm:col-span-3">
-                            <input v-model="newEmotion.name" placeholder="名称 (如: 开心)" class="codex-input w-full text-sm">
+                        
+                        <div v-if="uploadError" style="color: #ef4444; font-size: 0.875rem; border: 1px solid rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); padding: 12px; margin-top: 16px;">
+                            {{ uploadError }}
                         </div>
-                        <div class="sm:col-span-4">
-                            <input v-model="newEmotion.desc" placeholder="描述 (可选)" class="codex-input w-full text-sm">
-                        </div>
-                        <div class="sm:col-span-2">
-                            <button @click="addEmotion" :disabled="!newEmotion.key || addingEmotion" class="codex-btn primary w-full justify-center h-[42px] sm:h-full text-sm">
-                                <span v-if="addingEmotion">...</span>
-                                <span v-else>添加</span>
+                        
+                        <div style="display: flex; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--gold-dark);">
+                            <button type="button" @click="closeUploadModal" class="codex-btn" style="flex: 1;">取消</button>
+                            <button type="submit" :disabled="uploading || !uploadFile" class="codex-btn primary" style="flex: 1;">
+                                <span v-if="uploading">上传中...</span>
+                                <span v-else>确认添加</span>
                             </button>
                         </div>
-                    </div>
+                    </form>
                 </div>
+            </div>
 
-                <div class="p-3 sm:p-6 overflow-y-auto flex-grow" style="background: var(--bg-panel)">
-                    <div class="grid gap-2 sm:gap-3">
-                        <div v-for="cat in availableEmotions" :key="cat.key" class="p-3 sm:p-4 border border-[#333] flex flex-col gap-2 hover:border-gold transition-all group relative" style="background: var(--bg-card)">
-                            <div class="flex justify-between items-start gap-2">
-                                <div class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 min-w-0">
-                                    <span class="text-lg sm:text-xl font-serif text-gray-200 group-hover:text-gold transition-colors truncate">{{ cat.name || cat.key }}</span>
-                                    <span class="text-xs text-muted font-mono uppercase tracking-wider bg-black/40 px-2 py-0.5 sm:py-1 border border-white/5 rounded-sm self-start">{{ cat.key }}</span>
-                                </div>
-                                <button
-                                    @click="deleteEmotion(cat)"
-                                    :disabled="deletingEmotionKey === cat.key"
-                                    class="codex-btn danger text-xs px-2 sm:px-3 py-1 sm:py-1.5 disabled:opacity-60 flex-shrink-0"
-                                >
-                                    <span v-if="deletingEmotionKey === cat.key">...</span>
-                                    <span v-else>删除</span>
+            <!-- Category Management Modal -->
+            <div v-if="emotionsOpen" class="modal-overlay" @click.self="closeEmotionsModal">
+                <div class="modal-panel" style="max-width: 700px;">
+                    <div class="modal-panel-corner-bl"></div>
+                    <div class="modal-panel-corner-br"></div>
+                    
+                    <div class="modal-header">
+                        <h2>分类管理</h2>
+                        <button @click="closeEmotionsModal" class="modal-close">
+                            <svg style="width: 20px; height: 20px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <div style="padding: 24px;">
+                        <!-- Add New Category -->
+                        <div style="background: var(--bg-main); padding: 16px; margin-bottom: 20px; border: 1px solid var(--gold-dark);">
+                            <h3 style="margin: 0 0 16px 0; font-size: 0.9rem; color: var(--gold-primary); font-family: 'Cinzel', serif;">新增分类</h3>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 12px;">
+                                <input v-model="newEmotion.key" placeholder="标识 (如: happy)" class="codex-input">
+                                <input v-model="newEmotion.name" placeholder="名称 (如: 开心)" class="codex-input">
+                                <input v-model="newEmotion.desc" placeholder="描述 (可选)" class="codex-input">
+                                <button @click="addEmotion" :disabled="!newEmotion.key || addingEmotion" class="codex-btn primary">
+                                    {{ addingEmotion ? '...' : '添加' }}
                                 </button>
                             </div>
-                            <p class="text-xs sm:text-sm text-gray-500 italic font-serif border-l-2 border-amber-900/30 pl-2 sm:pl-3">
-                                {{ cat.desc || '暂无描述' }}
-                            </p>
                         </div>
-                        <div v-if="availableEmotions.length === 0" class="text-center text-gray-500 py-8 sm:py-12 border border-dashed border-white/10">
-                            暂无分类数据
+                        
+                        <!-- Category List -->
+                        <div style="display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto;">
+                            <div 
+                                v-for="cat in availableEmotions" 
+                                :key="cat.key"
+                                style="display: flex; align-items: center; justify-content: space-between; padding: 16px; background: var(--bg-slot); border: 1px solid var(--gold-dark);"
+                            >
+                                <div>
+                                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 4px;">
+                                        <span style="font-family: 'Cinzel', serif; color: var(--gold-primary); font-size: 1.1rem;">{{ cat.name || cat.key }}</span>
+                                        <span style="font-size: 0.75rem; color: var(--text-muted); background: var(--bg-main); padding: 2px 8px; border: 1px solid var(--gold-dark);">{{ cat.key }}</span>
+                                    </div>
+                                    <p style="margin: 0; color: var(--text-muted); font-size: 0.85rem; font-style: italic;">{{ cat.desc || '暂无描述' }}</p>
+                                </div>
+                                <button 
+                                    @click="deleteEmotion(cat)" 
+                                    :disabled="deletingEmotionKey === cat.key"
+                                    class="codex-btn danger"
+                                >
+                                    {{ deletingEmotionKey === cat.key ? '...' : '删除' }}
+                                </button>
+                            </div>
+                            
+                            <div v-if="availableEmotions.length === 0" class="empty-state" style="padding: 40px;">
+                                <p>暂无分类</p>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Batch Action Bar - 移动端适配 -->
-        <div v-if="isBatchMode" class="fixed bottom-4 sm:bottom-8 left-1/2 transform -translate-x-1/2 z-40 bg-black/95 border border-gold px-3 sm:px-6 lg:px-8 py-3 sm:py-4 rounded-lg shadow-[0_0_30px_rgba(0,0,0,0.8)] flex flex-col sm:flex-row items-center gap-2 sm:gap-4 lg:gap-6 animate-slide-up max-w-[95vw] sm:max-w-none">
-            <span class="text-gold font-cinzel text-sm sm:text-base whitespace-nowrap">已选中 {{ selectedImages.size }} 项</span>
-            <div class="hidden sm:block h-6 w-px bg-white/20"></div>
-            <div class="flex items-center gap-2 sm:gap-3">
-                <button @click="selectAll" class="codex-btn text-xs sm:text-sm px-2 sm:px-4 py-1.5 sm:py-2 whitespace-nowrap">全选</button>
-                <button @click="openBatchMoveModal" :disabled="selectedImages.size === 0" class="codex-btn text-xs sm:text-sm px-2 sm:px-4 py-1.5 sm:py-2 whitespace-nowrap disabled:opacity-50">移动</button>
-                <button @click="handleBatchDelete" :disabled="selectedImages.size === 0" class="codex-btn danger text-xs sm:text-sm px-2 sm:px-4 py-1.5 sm:py-2 whitespace-nowrap disabled:opacity-50">删除</button>
-            </div>
-            <div class="hidden sm:block h-6 w-px bg-white/20"></div>
-            <button @click="toggleBatchMode" class="text-gray-400 hover:text-white p-1 sm:p-2">
-                <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-        </div>
-
-        <!-- Batch Move Modal - 移动端适配 -->
-        <div v-if="batchMoveOpen" class="fixed inset-0 z-50 modal-overlay flex items-center justify-center p-2 sm:p-4" @click.self="closeBatchMoveModal">
-            <div class="modal-content w-full max-w-md">
-                <div class="modal-header">
-                    <h3 class="text-lg sm:text-xl m-0">批量移动到...</h3>
-                </div>
-                <div class="p-4 sm:p-6">
-                    <label class="text-xs uppercase text-amber-700 font-bold tracking-[0.15em] sm:tracking-[0.2em] block mb-2">选择目标分类</label>
-                    <select v-model="batchTargetCategory" class="codex-input w-full mb-4 sm:mb-6 text-base">
-                        <option value="" disabled>请选择...</option>
-                        <option v-for="cat in categories" :key="cat.key" :value="cat.key">{{ cat.name }}</option>
-                    </select>
+            <!-- Batch Move Modal -->
+            <div v-if="batchMoveOpen" class="modal-overlay" @click.self="closeBatchMoveModal">
+                <div class="modal-panel" style="max-width: 400px;">
+                    <div class="modal-panel-corner-bl"></div>
+                    <div class="modal-panel-corner-br"></div>
                     
-                    <div class="flex gap-2 sm:gap-3 justify-end">
-                        <button @click="closeBatchMoveModal" class="codex-btn py-2 sm:py-2.5 text-sm sm:text-base">取消</button>
-                        <button @click="confirmBatchMove" class="codex-btn primary py-2 sm:py-2.5 text-sm sm:text-base">确认移动</button>
+                    <div class="modal-header">
+                        <h2>批量移动</h2>
+                    </div>
+                    
+                    <div style="padding: 24px;">
+                        <p style="margin: 0 0 16px 0; color: var(--text-muted);">已选择 {{ selectedImages.size }} 张图片</p>
+                        
+                        <label style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); display: block; margin-bottom: 8px;">目标分类</label>
+                        <select v-model="batchTargetCategory" class="codex-input" style="margin-bottom: 20px;">
+                            <option value="">请选择...</option>
+                            <option v-for="cat in categories" :key="cat.key" :value="cat.key">{{ cat.name }}</option>
+                        </select>
+                        
+                        <div style="display: flex; gap: 12px;">
+                            <button @click="closeBatchMoveModal" class="codex-btn" style="flex: 1;">取消</button>
+                            <button @click="confirmBatchMove" :disabled="!batchTargetCategory" class="codex-btn primary" style="flex: 1;">确认移动</button>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        </div>
+            <!-- Batch Action Bar -->
+            <div v-if="isBatchMode && selectedImages.size > 0" class="batch-bar">
+                <span style="font-family: 'Cinzel', serif; color: var(--gold-bright); font-size: 1rem;">已选择 {{ selectedImages.size }} 张</span>
+                <div style="width: 1px; height: 24px; background: var(--gold-dark);"></div>
+                <button @click="selectAll" class="codex-btn" style="font-size: 0.8rem; padding: 8px 16px;">全选</button>
+                <button @click="openBatchMoveModal" class="codex-btn" style="font-size: 0.8rem; padding: 8px 16px;">移动</button>
+                <button @click="handleBatchDelete" class="codex-btn danger" style="font-size: 0.8rem; padding: 8px 16px;">删除</button>
+                <div style="width: 1px; height: 24px; background: var(--gold-dark);"></div>
+                <button @click="toggleBatchMode" class="codex-btn icon-btn" style="width: 32px; height: 32px;">
+                    <svg style="width: 16px; height: 16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </template>
     </div>
 
-    <script src="web/app.js" defer></script>
+    <script src="web/app.js"></script>
 </body>
 </html>

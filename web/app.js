@@ -2,6 +2,7 @@ const { createApp, ref, reactive, onMounted } = Vue;
 
 createApp({
     setup() {
+        // State
         const images = ref([]);
         const categories = ref([]);
         const stats = reactive({ total: 0, categories: 0, today: 0 });
@@ -10,19 +11,22 @@ createApp({
         const selectedCategory = ref('');
         const sortBy = ref('newest');
         const currentPage = ref(1);
-        const pageSize = ref(24);
+        const pageSize = ref(30);
         const total = ref(0);
 
+        // Preview Modal
         const previewOpen = ref(false);
         const previewItem = ref(null);
         const isEditing = ref(false);
         const editForm = reactive({ category: '', tags: '', desc: '' });
 
+        // Batch Mode
         const isBatchMode = ref(false);
         const selectedImages = ref(new Set());
         const batchMoveOpen = ref(false);
         const batchTargetCategory = ref('');
 
+        // Upload Modal
         const uploadOpen = ref(false);
         const uploading = ref(false);
         const uploadFile = ref(null);
@@ -31,13 +35,13 @@ createApp({
         const uploadForm = reactive({ emotion: '', tags: '', desc: '' });
         const availableEmotions = ref([]);
 
+        // Category Management
+        const emotionsOpen = ref(false);
         const newEmotion = reactive({ key: '', name: '', desc: '' });
         const addingEmotion = ref(false);
         const deletingEmotionKey = ref('');
 
-        const emotionsOpen = ref(false);
-
-        const searchTimeout = ref(null);
+        // Auth
         const isAuthed = ref(false);
         const authRequired = ref(false);
         const authChecking = ref(true);
@@ -46,6 +50,13 @@ createApp({
         const showPassword = ref(false);
         const sessionTimeout = ref(3600);
 
+        const searchTimeout = ref(null);
+
+        // Theme
+        const isDarkTheme = ref(true);
+        const theme = ref('dark');
+
+        // API Helper
         const apiFetch = (url, options = {}) => {
             const headers = new Headers(options.headers || {});
             return fetch(url, { ...options, headers, credentials: 'same-origin' })
@@ -59,7 +70,7 @@ createApp({
                 .catch(() => fetch(url, { ...options, headers, credentials: 'same-origin' }));
         };
 
-        // Fetch Methods
+        // Data Fetching
         const fetchStats = async () => {
             try {
                 const res = await apiFetch('api/stats');
@@ -75,8 +86,8 @@ createApp({
             currentPage.value = page;
             try {
                 const params = new URLSearchParams({
-                    page,
-                    size: pageSize.value,
+                    page: page.toString(),
+                    size: pageSize.value.toString(),
                     q: searchQuery.value,
                     category: selectedCategory.value,
                     sort: sortBy.value,
@@ -109,6 +120,7 @@ createApp({
             await fetchImages(1);
         };
 
+        // Auth
         const initAuth = async () => {
             authChecking.value = true;
             loginError.value = '';
@@ -180,56 +192,37 @@ createApp({
             apiFetch('auth/logout', { method: 'POST' }).catch(() => {});
         };
 
+        // Search
         const debouncedSearch = () => {
             clearTimeout(searchTimeout.value);
             searchTimeout.value = setTimeout(() => fetchImages(1), 400);
         };
 
-        const deleteImage = async (img, blacklist = false) => {
-            const msg = blacklist
-                ? '确定要销毁并永久拉黑这份战利品吗？\n拉黑后将不再自动收集此相同的图片。'
-                : '确定要丢弃这份战利品吗？此操作无法撤销。';
-            if (!confirm(msg)) return;
-            try {
-                const url = blacklist ? `api/images/${img.hash}?blacklist=true` : `api/images/${img.hash}`;
-                const res = await apiFetch(url, { method: 'DELETE' });
-                if (res.ok) {
-                    if (previewOpen.value) closePreview();
-                    fetchImages(currentPage.value);
-                    fetchStats();
-                } else alert('删除失败');
-            } catch (e) {
-                alert('出错');
-            }
-        };
-
         // Pagination
         const prevPage = () => currentPage.value > 1 && fetchImages(currentPage.value - 1);
-        const nextPage = () =>
-            currentPage.value * pageSize.value < total.value && fetchImages(currentPage.value + 1);
+        const nextPage = () => currentPage.value * pageSize.value < total.value && fetchImages(currentPage.value + 1);
 
-        // Modal Control
+        // Preview Modal
         const openPreview = (img) => {
             previewItem.value = img;
             previewOpen.value = true;
         };
+
         const closePreview = () => {
             previewOpen.value = false;
             previewItem.value = null;
+            isEditing.value = false;
         };
-
-        // Quick Switch Logic
-        const getCurrentIndex = () => images.value.findIndex((i) => i.hash === previewItem.value?.hash);
 
         const prevImage = () => {
             if (!previewItem.value) return;
-            const idx = getCurrentIndex();
+            const idx = images.value.findIndex((i) => i.hash === previewItem.value.hash);
             if (idx > 0) previewItem.value = images.value[idx - 1];
         };
 
         const nextImage = () => {
             if (!previewItem.value) return;
-            const idx = getCurrentIndex();
+            const idx = images.value.findIndex((i) => i.hash === previewItem.value.hash);
             if (idx < images.value.length - 1) previewItem.value = images.value[idx + 1];
         };
 
@@ -240,23 +233,66 @@ createApp({
             if (e.key === 'Escape') closePreview();
         };
 
-        const openUploadModal = () => {
-            uploadOpen.value = true;
-            uploadFile.value = null;
-            uploadPreviewUrl.value = null;
-            uploadError.value = null;
-            Object.assign(uploadForm, { emotion: '', tags: '', desc: '' });
-            fetchEmotions();
+        // Edit
+        const startEdit = () => {
+            if (!previewItem.value) return;
+            Object.assign(editForm, {
+                category: previewItem.value.category,
+                tags: previewItem.value.tags.join(', '),
+                desc: previewItem.value.desc,
+            });
+            isEditing.value = true;
         };
-        const closeUploadModal = () => (uploadOpen.value = false);
 
-        const openEmotionsModal = () => {
-            emotionsOpen.value = true;
-            fetchEmotions();
+        const cancelEdit = () => {
+            isEditing.value = false;
         };
-        const closeEmotionsModal = () => (emotionsOpen.value = false);
 
-        // Batch Logic
+        const saveEdit = async () => {
+            if (!previewItem.value) return;
+            try {
+                const res = await apiFetch(`api/images/${previewItem.value.hash}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(editForm),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    isEditing.value = false;
+                    previewItem.value.category = editForm.category;
+                    previewItem.value.tags = editForm.tags.split(',').map((t) => t.trim()).filter((t) => t);
+                    previewItem.value.desc = editForm.desc;
+                    fetchImages(currentPage.value);
+                } else {
+                    alert(data.error || '保存失败');
+                }
+            } catch (e) {
+                alert('保存出错: ' + e.message);
+            }
+        };
+
+        // Delete
+        const deleteImage = async (img, blacklist = false) => {
+            const msg = blacklist
+                ? '确定要删除并拉黑这张图片吗？\n拉黑后将不再自动收集此图片。'
+                : '确定要删除这张图片吗？此操作无法撤销。';
+            if (!confirm(msg)) return;
+            try {
+                const url = blacklist ? `api/images/${img.hash}?blacklist=true` : `api/images/${img.hash}`;
+                const res = await apiFetch(url, { method: 'DELETE' });
+                if (res.ok) {
+                    closePreview();
+                    fetchImages(currentPage.value);
+                    fetchStats();
+                } else {
+                    alert('删除失败');
+                }
+            } catch (e) {
+                alert('操作失败');
+            }
+        };
+
+        // Batch Operations
         const toggleBatchMode = () => {
             isBatchMode.value = !isBatchMode.value;
             selectedImages.value.clear();
@@ -293,9 +329,11 @@ createApp({
                     selectedImages.value.clear();
                     fetchImages(currentPage.value);
                     fetchStats();
-                } else alert(data.error || '删除失败');
+                } else {
+                    alert(data.error || '删除失败');
+                }
             } catch (e) {
-                alert('操作出错: ' + e.message);
+                alert('操作失败: ' + e.message);
             }
         };
 
@@ -303,9 +341,11 @@ createApp({
             if (selectedImages.value.size === 0) return;
             batchTargetCategory.value = '';
             batchMoveOpen.value = true;
-            fetchEmotions();
         };
-        const closeBatchMoveModal = () => (batchMoveOpen.value = false);
+
+        const closeBatchMoveModal = () => {
+            batchMoveOpen.value = false;
+        };
 
         const confirmBatchMove = async () => {
             if (!batchTargetCategory.value) return;
@@ -325,125 +365,28 @@ createApp({
                     isBatchMode.value = false;
                     fetchImages(currentPage.value);
                     fetchStats();
-                } else alert(data.error || '移动失败');
-            } catch (e) {
-                alert('操作出错: ' + e.message);
-            }
-        };
-
-        // Edit Logic
-        const startEdit = () => {
-            if (!previewItem.value) return;
-            Object.assign(editForm, {
-                category: previewItem.value.category,
-                tags: previewItem.value.tags.join(', '),
-                desc: previewItem.value.desc,
-            });
-            isEditing.value = true;
-            fetchEmotions(); // ensure categories are loaded
-        };
-
-        const cancelEdit = () => {
-            isEditing.value = false;
-        };
-
-        const saveEdit = async () => {
-            if (!previewItem.value) return;
-            try {
-                const res = await apiFetch(`api/images/${previewItem.value.hash}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(editForm),
-                });
-                const data = await res.json();
-                if (data.success) {
-                    isEditing.value = false;
-                    // Manually update local state to avoid flicker, though list refresh will happen
-                    previewItem.value.category = editForm.category;
-                    previewItem.value.tags = editForm.tags
-                        .split(',')
-                        .map((t) => t.trim())
-                        .filter((t) => t);
-                    previewItem.value.desc = editForm.desc;
-
-                    fetchImages(currentPage.value);
-                } else alert(data.error || '保存失败');
-            } catch (e) {
-                alert('保存出错: ' + e.message);
-            }
-        };
-
-        const addEmotion = async () => {
-            if (!newEmotion.key) return;
-            addingEmotion.value = true;
-            try {
-                const newCat = { ...newEmotion };
-                // Add to current list to send full list
-                const currentList = [...availableEmotions.value];
-                // Check if exists
-                const existingIdx = currentList.findIndex((c) => c.key === newCat.key);
-                if (existingIdx >= 0) {
-                    if (!confirm(`分类 ${newCat.key} 已存在，确定要更新吗？`)) {
-                        addingEmotion.value = false;
-                        return;
-                    }
-                    currentList[existingIdx] = newCat;
                 } else {
-                    currentList.push(newCat);
-                }
-
-                const res = await apiFetch('api/categories', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ categories: currentList }),
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    fetchEmotions();
-                    // Reset form
-                    newEmotion.key = '';
-                    newEmotion.name = '';
-                    newEmotion.desc = '';
-                } else {
-                    alert(data.error || '添加失败');
+                    alert(data.error || '转移失败');
                 }
             } catch (e) {
-                alert('操作出错: ' + e.message);
-            } finally {
-                addingEmotion.value = false;
+                alert('操作失败: ' + e.message);
             }
         };
 
-        const deleteEmotion = async (cat) => {
-            if (!cat?.key) return;
-            if (!confirm(`确定要删除分类 ${cat.key} 吗？该分类下的图片会被直接删除且无法恢复。`))
-                return;
-            deletingEmotionKey.value = cat.key;
-            try {
-                const res = await apiFetch(`api/categories/${encodeURIComponent(cat.key)}`, {
-                    method: 'DELETE',
-                });
-                const data = await res.json().catch(() => ({}));
-                if (res.ok && data.success) {
-                    if (selectedCategory.value === cat.key) selectedCategory.value = '';
-                    if (editForm.category === cat.key) editForm.category = '';
-                    if (previewItem.value && previewItem.value.category === cat.key)
-                        previewItem.value.category = 'unknown';
-                    fetchEmotions();
-                    fetchImages(currentPage.value);
-                    fetchStats();
-                } else {
-                    alert(data.error || '删除失败');
-                }
-            } catch (e) {
-                alert('操作出错: ' + e.message);
-            } finally {
-                deletingEmotionKey.value = '';
-            }
+        // Upload
+        const openUploadModal = () => {
+            uploadOpen.value = true;
+            uploadFile.value = null;
+            uploadPreviewUrl.value = null;
+            uploadError.value = null;
+            Object.assign(uploadForm, { emotion: '', tags: '', desc: '' });
+            fetchEmotions();
         };
 
-        // Upload Logic
+        const closeUploadModal = () => {
+            uploadOpen.value = false;
+        };
+
         const handleFileSelect = (e) => {
             const file = e.target.files[0];
             if (file && file.type.startsWith('image/')) {
@@ -479,12 +422,274 @@ createApp({
             }
         };
 
+        /**
+         * 图片智能分析功能 - 独立模块
+         * 
+         * 功能：调用 VLM 分析图片内容，自动提取分类、标签和描述
+         * 使用场景：WebUI 上传表情包时自动填充元数据
+         * 
+         * 使用示例：
+         * const analyzer = useImageAnalyzer();
+         * const data = await analyzer.analyze(file);
+         * analyzer.applyToForm(data, form, categories);
+         */
+        const useImageAnalyzer = () => {
+            const isAnalyzing = ref(false);
+            const lastAnalysisResult = ref(null);
+            
+            /**
+             * 分析图片
+             * @param {File} file - 图片文件
+             * @returns {Promise<{category, tags, description}>} 分析结果
+             */
+            const analyze = async (file) => {
+                if (!file) {
+                    throw new Error('请先选择图片');
+                }
+                
+                isAnalyzing.value = true;
+                console.log('[Analyzer] 开始分析图片:', file.name);
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    const res = await apiFetch('api/analyze', { method: 'POST', body: formData });
+                    
+                    if (res.status === 401) {
+                        throw new Error('登录已过期，请重新登录');
+                    }
+                    
+                    if (!res.ok) {
+                        const errorText = await res.text();
+                        throw new Error(`服务器错误 (${res.status}): ${errorText}`);
+                    }
+                    
+                    const data = await res.json();
+                    
+                    if (!data.success) {
+                        throw new Error(data.error || '分析失败');
+                    }
+                    
+                    lastAnalysisResult.value = data;
+                    console.log('[Analyzer] 分析成功:', data);
+                    return data;
+                } catch (e) {
+                    console.error('[Analyzer] 分析失败:', e);
+                    throw e;
+                } finally {
+                    isAnalyzing.value = false;
+                }
+            };
+            
+            /**
+             * 将分析结果应用到表单
+             * @param {Object} data - 分析结果
+             * @param {Object} form - 表单对象
+             * @param {Array} categories - 可用分类列表
+             * @returns {Object} 填充结果统计
+             */
+            const applyToForm = (data, form, categories = []) => {
+                const result = { filled: false, fields: [] };
+                
+                // 填充分类
+                if (data.category) {
+                    const exists = categories.some(e => e.key === data.category);
+                    if (exists) {
+                        form.emotion = data.category;
+                        result.fields.push('category');
+                    } else if (categories.length > 0) {
+                        // 如果返回的分类不存在，使用第一个可用分类
+                        console.warn('[Analyzer] 分类不存在，使用默认:', data.category);
+                        form.emotion = categories[0].key;
+                        result.fields.push('category');
+                    }
+                }
+                
+                // 填充标签（智能合并，避免重复）
+                if (data.tags && data.tags.length > 0) {
+                    const existingTags = form.tags ? form.tags.split(',').map(t => t.trim()).filter(t => t) : [];
+                    const newTags = data.tags.filter(t => !existingTags.includes(t));
+                    if (newTags.length > 0) {
+                        form.tags = [...existingTags, ...newTags].join(', ');
+                        result.fields.push('tags');
+                    }
+                }
+                
+                // 填充描述（仅在空时填充）
+                if (data.description && !form.desc) {
+                    form.desc = data.description;
+                    result.fields.push('desc');
+                }
+                
+                result.filled = result.fields.length > 0;
+                console.log('[Analyzer] 表单填充结果:', result);
+                return result;
+            };
+            
+            return {
+                isAnalyzing,
+                lastAnalysisResult,
+                analyze,
+                applyToForm,
+            };
+        };
+        
+        // 创建分析器实例
+        const imageAnalyzer = useImageAnalyzer();
+        const analyzing = imageAnalyzer.isAnalyzing;
+        
+        // 包装函数 - 用于上传模态框
+        const analyzeImage = async () => {
+            uploadError.value = null;
+            
+            try {
+                const data = await imageAnalyzer.analyze(uploadFile.value);
+                const result = imageAnalyzer.applyToForm(data, uploadForm, availableEmotions.value);
+                
+                if (!result.filled) {
+                    uploadError.value = '未能识别有效信息';
+                }
+            } catch (e) {
+                uploadError.value = e.message || '分析失败';
+            }
+        };
+
+        // Category Management
+        const openEmotionsModal = () => {
+            emotionsOpen.value = true;
+            fetchEmotions();
+        };
+
+        const closeEmotionsModal = () => {
+            emotionsOpen.value = false;
+        };
+
+        const addEmotion = async () => {
+            if (!newEmotion.key) return;
+            addingEmotion.value = true;
+            try {
+                const newCat = { ...newEmotion };
+                const currentList = [...availableEmotions.value];
+                const existingIdx = currentList.findIndex((c) => c.key === newCat.key);
+                if (existingIdx >= 0) {
+                    if (!confirm(`分类 ${newCat.key} 已存在，确定要更新吗？`)) {
+                        addingEmotion.value = false;
+                        return;
+                    }
+                    currentList[existingIdx] = newCat;
+                } else {
+                    currentList.push(newCat);
+                }
+
+                const res = await apiFetch('api/categories', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ categories: currentList }),
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    fetchEmotions();
+                    newEmotion.key = '';
+                    newEmotion.name = '';
+                    newEmotion.desc = '';
+                } else {
+                    alert(data.error || '添加失败');
+                }
+            } catch (e) {
+                alert('操作失败: ' + e.message);
+            } finally {
+                addingEmotion.value = false;
+            }
+        };
+
+        const deleteEmotion = async (cat) => {
+            if (!cat?.key) return;
+            if (!confirm(`确定要删除分类 ${cat.key} 吗？该分类下的图片会被直接删除且无法恢复。`))
+                return;
+            deletingEmotionKey.value = cat.key;
+            try {
+                const res = await apiFetch(`api/categories/${encodeURIComponent(cat.key)}`, {
+                    method: 'DELETE',
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success) {
+                    if (selectedCategory.value === cat.key) selectedCategory.value = '';
+                    if (editForm.category === cat.key) editForm.category = '';
+                    if (previewItem.value && previewItem.value.category === cat.key)
+                        previewItem.value.category = 'unknown';
+                    fetchEmotions();
+                    fetchImages(currentPage.value);
+                    fetchStats();
+                } else {
+                    alert(data.error || '删除失败');
+                }
+            } catch (e) {
+                alert('操作失败: ' + e.message);
+            } finally {
+                deletingEmotionKey.value = '';
+            }
+        };
+
+        // Utility
+        const formatDate = (timestamp) => {
+            if (!timestamp) return '未知';
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleDateString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+        };
+
+        // Theme functions
+        const initTheme = () => {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme) {
+                theme.value = savedTheme;
+                isDarkTheme.value = savedTheme === 'dark';
+            } else {
+                // Check system preference
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                theme.value = prefersDark ? 'dark' : 'light';
+                isDarkTheme.value = prefersDark;
+            }
+            applyTheme();
+        };
+
+        const applyTheme = () => {
+            document.documentElement.setAttribute('data-theme', theme.value);
+            localStorage.setItem('theme', theme.value);
+        };
+
+        const toggleTheme = () => {
+            // Create flash effect
+            const flash = document.createElement('div');
+            flash.className = 'theme-flash active';
+            document.body.appendChild(flash);
+            
+            // Toggle theme
+            isDarkTheme.value = !isDarkTheme.value;
+            theme.value = isDarkTheme.value ? 'dark' : 'light';
+            applyTheme();
+            
+            // Remove flash element after animation
+            setTimeout(() => {
+                flash.remove();
+            }, 600);
+        };
+
         onMounted(() => {
             initAuth();
+            initTheme();
             window.addEventListener('keydown', handleKeydown);
         });
 
         return {
+            // State
             images,
             categories,
             stats,
@@ -495,41 +700,21 @@ createApp({
             currentPage,
             pageSize,
             total,
+            
+            // Preview
             previewOpen,
             previewItem,
+            isEditing,
+            editForm,
             openPreview,
             closePreview,
             prevImage,
             nextImage,
-            uploadOpen,
-            uploading,
-            uploadFile,
-            uploadPreviewUrl,
-            uploadError,
-            uploadForm,
-            availableEmotions,
-            openUploadModal,
-            closeUploadModal,
-            handleFileSelect,
-            submitUpload,
-            debouncedSearch,
-            deleteImage,
-            prevPage,
-            nextPage,
-            emotionsOpen,
-            openEmotionsModal,
-            closeEmotionsModal,
-            fetchImages,
-            newEmotion,
-            addingEmotion,
-            addEmotion,
-            deletingEmotionKey,
-            deleteEmotion,
-            isEditing,
-            editForm,
             startEdit,
             cancelEdit,
             saveEdit,
+            
+            // Batch
             isBatchMode,
             selectedImages,
             batchMoveOpen,
@@ -541,6 +726,35 @@ createApp({
             openBatchMoveModal,
             closeBatchMoveModal,
             confirmBatchMove,
+            
+            // Upload
+            uploadOpen,
+            uploading,
+            uploadFile,
+            uploadPreviewUrl,
+            uploadError,
+            uploadForm,
+            availableEmotions,
+            openUploadModal,
+            closeUploadModal,
+            handleFileSelect,
+            submitUpload,
+            
+            // Auto Analysis (独立功能)
+            analyzing,
+            analyzeImage,
+            
+            // Category
+            emotionsOpen,
+            newEmotion,
+            addingEmotion,
+            deletingEmotionKey,
+            openEmotionsModal,
+            closeEmotionsModal,
+            addEmotion,
+            deleteEmotion,
+            
+            // Auth
             isAuthed,
             authRequired,
             authChecking,
@@ -550,6 +764,19 @@ createApp({
             sessionTimeout,
             submitLogin,
             logout,
+
+            // Theme
+            isDarkTheme,
+            theme,
+            toggleTheme,
+
+            // Actions
+            fetchImages,
+            debouncedSearch,
+            deleteImage,
+            prevPage,
+            nextPage,
+            formatDate,
         };
     },
 }).mount('#app');

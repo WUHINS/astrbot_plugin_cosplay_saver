@@ -349,6 +349,7 @@ class WebServer:
         self.app.router.add_post("/api/images/batch/delete", self.handle_batch_delete)
         self.app.router.add_post("/api/images/batch/move", self.handle_batch_move)
         self.app.router.add_post("/api/images/upload", self.handle_upload_image)
+        self.app.router.add_post("/api/analyze", self.handle_analyze_image)
         self.app.router.add_get("/api/stats", self.handle_get_stats)
         self.app.router.add_get("/api/config", self.handle_get_config)
         self.app.router.add_get("/api/categories", self.handle_get_categories)
@@ -1128,3 +1129,94 @@ class WebServer:
         except Exception as e:
             logger.error(f"获取情绪分类失败: {e}")
             return self._err(str(e))
+
+
+    async def handle_analyze_image(self, request: web.Request) -> web.Response:
+        """使用VLM分析图片并返回分类、标签和描述建议。
+        
+        复用 ImageProcessorService.classify_image 方法，避免重复实现。
+        """
+        try:
+            # 检查是否有 image_processor_service
+            if not hasattr(self.plugin, "image_processor_service"):
+                return self._err("图片处理服务不可用", 500)
+
+            image_processor = self.plugin.image_processor_service
+
+            # 读取上传的文件
+            reader = await request.multipart()
+            file_field = await reader.next()
+            
+            if not file_field or file_field.name != "file":
+                return self._err("未找到上传文件", 400)
+
+            # 读取文件内容
+            file_content = await file_field.read()
+            if not file_content:
+                return self._err("文件内容为空", 400)
+
+            # 验证文件类型
+            content_type = file_field.headers.get("Content-Type", "")
+            allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"}
+            if content_type not in allowed_types:
+                return self._err(f"不支持的文件类型: {content_type}", 400)
+
+            # 保存到临时文件
+            temp_dir = Path(self.data_dir) / "temp"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            
+            file_ext = {
+                "image/jpeg": ".jpg",
+                "image/png": ".png",
+                "image/gif": ".gif",
+                "image/webp": ".webp",
+                "image/bmp": ".bmp",
+            }.get(content_type, ".jpg")
+            
+            temp_filename = f"analyze_{uuid.uuid4().hex}{file_ext}"
+            temp_path = temp_dir / temp_filename
+
+            try:
+                # 写入临时文件
+                await asyncio.to_thread(temp_path.write_bytes, file_content)
+
+                # 调用现有的 classify_image 方法（复用提示词和解析逻辑）
+                category, tags, desc, emotion, scenes = await image_processor.classify_image(
+                    event=None,
+                    file_path=str(temp_path),
+                    categories=list(self.plugin.plugin_config.categories or []),
+                    content_filtration=False,  # WebUI上传不做内容过滤，让用户自己决定
+                )
+
+                # 检查是否被过滤
+                if category == image_processor.CATEGORY_FILTERED:
+                    return self._err("图片内容审核不通过", 400)
+
+                # 如果分类失败，返回错误
+                if not category:
+                    return self._err("无法识别图片分类", 500)
+
+                return self._ok({
+                    "category": category,
+                    "tags": tags,
+                    "description": desc,
+                })
+
+            finally:
+                # 清理临时文件
+                try:
+                    if temp_path.exists():
+                        await asyncio.to_thread(temp_path.unlink)
+                except Exception:
+                    pass
+
+        except FileNotFoundError as e:
+            logger.error(f"分析图片时文件不存在: {e}")
+            return self._err("文件处理失败", 500)
+        except ValueError as e:
+            if "未配置视觉模型" in str(e):
+                return self._err("未配置视觉模型(vision_provider_id)，请在插件配置中设置", 400)
+            return self._err(f"配置错误: {str(e)}", 500)
+        except Exception as e:
+            logger.error(f"VLM分析失败: {e}", exc_info=True)
+            return self._err(f"分析失败: {str(e)}", 500)
