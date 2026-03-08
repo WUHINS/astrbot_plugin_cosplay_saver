@@ -45,65 +45,69 @@ class EventHandler:
             s = s[1:-1].strip()
         return s
 
-    def _is_gif_url(self, url: str) -> bool:
-        """检查 URL 是否指向 GIF 图片。
-
-        Args:
-            url: 图片 URL
-
-        Returns:
-            bool: 是否为 GIF
-        """
-        if not url:
-            return False
-        url_lower = url.lower()
-        # 检查 URL 路径或查询参数中是否包含 .gif
-        return ".gif" in url_lower or "gif" in url_lower.split("?")[0][-5:]
-
-    async def _download_original_gif(self, img: Image) -> str | None:
-        """下载原始 GIF 文件。
+    async def _download_original_image(self, img: Image) -> tuple[str | None, bool]:
+        """下载原始图片文件。
 
         Args:
             img: 图片组件
 
         Returns:
-            str | None: 临时文件路径，失败返回 None
+            tuple[str | None, bool]: (临时文件路径, 是否为GIF动图)，失败返回 (None, False)
         """
         url = self._normalize_str(getattr(img, "url", ""))
         if not url:
-            return None
-
-        if not self._is_gif_url(url):
-            return None
+            return None, False
 
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
                     if resp.status != 200:
-                        logger.warning(f"下载 GIF 失败: HTTP {resp.status}")
-                        return None
+                        logger.warning(f"下载图片失败: HTTP {resp.status}")
+                        return None, False
 
-                    content_type = resp.headers.get("Content-Type", "")
-                    if "gif" not in content_type.lower() and not self._is_gif_url(url):
-                        logger.debug(f"响应非 GIF 类型: {content_type}")
-                        return None
+                    content_type = resp.headers.get("Content-Type", "").lower()
+                    content = await resp.read()
+
+                    # 根据 Content-Type 确定扩展名和是否为 GIF
+                    is_gif = "gif" in content_type
+                    if is_gif:
+                        ext = ".gif"
+                    elif "png" in content_type:
+                        ext = ".png"
+                    elif "webp" in content_type:
+                        ext = ".webp"
+                    elif "jpeg" in content_type or "jpg" in content_type:
+                        ext = ".jpg"
+                    else:
+                        # 尝试从文件头判断
+                        if content[:6] == b'GIF89a' or content[:6] == b'GIF87a':
+                            ext = ".gif"
+                            is_gif = True
+                        elif content[:8] == b'\x89PNG\r\n\x1a\n':
+                            ext = ".png"
+                        elif content[:4] == b'RIFF' and content[8:12] == b'WEBP':
+                            ext = ".webp"
+                        else:
+                            ext = ".jpg"
 
                     # 保存到临时文件
-                    content = await resp.read()
-                    temp_fd, temp_path = tempfile.mkstemp(suffix=".gif")
+                    temp_fd, temp_path = tempfile.mkstemp(suffix=ext)
                     try:
                         os.write(temp_fd, content)
-                        logger.debug(f"已下载原始 GIF: {temp_path} ({len(content)} bytes)")
-                        return temp_path
+                        logger.debug(
+                            f"已下载原始图片: {temp_path} ({len(content)} bytes, "
+                            f"type={content_type}, is_gif={is_gif})"
+                        )
+                        return temp_path, is_gif
                     finally:
                         os.close(temp_fd)
 
         except asyncio.TimeoutError:
-            logger.warning("下载 GIF 超时")
-            return None
+            logger.warning("下载图片超时")
+            return None, False
         except Exception as e:
-            logger.warning(f"下载 GIF 失败: {e}")
-            return None
+            logger.warning(f"下载图片失败: {e}")
+            return None, False
 
     def _should_process_image(self) -> bool:
         """根据偷图模式（概率/冷却）判断是否应该处理图片。
@@ -382,13 +386,11 @@ class EventHandler:
         if force_active:
             img = imgs[0]
             try:
-                # 尝试下载原始 GIF 文件（如果是动图）
-                temp_path: str | None = None
-                is_gif = self._is_gif_url(self._normalize_str(getattr(img, "url", "")))
-
-                if is_gif:
-                    logger.debug("强制捕获: 检测到 GIF 图片，尝试下载原始文件")
-                    temp_path = await self._download_original_gif(img)
+                # 尝试下载原始图片文件
+                temp_path: str | None
+                temp_path, is_gif = await self._download_original_image(img)
+                if temp_path and is_gif:
+                    logger.debug("强制捕获: 已下载原始 GIF 文件")
 
                 if not temp_path:
                     temp_path = await img.convert_to_file_path()
@@ -476,17 +478,13 @@ class EventHandler:
 
                 logger.info("检测到平台标记的表情包，开始处理")
 
-                # 尝试下载原始 GIF 文件（如果是动图）
-                temp_path: str | None = None
-                is_gif = self._is_gif_url(self._normalize_str(getattr(img, "url", "")))
+                # 尝试下载原始图片文件
+                temp_path: str | None
+                temp_path, is_gif = await self._download_original_image(img)
+                if temp_path and is_gif:
+                    logger.debug(f"已下载原始 GIF: {temp_path}")
 
-                if is_gif:
-                    logger.debug("检测到 GIF 图片，尝试下载原始文件")
-                    temp_path = await self._download_original_gif(img)
-                    if temp_path:
-                        logger.debug(f"已下载原始 GIF: {temp_path}")
-
-                # 如果不是 GIF 或下载失败，使用框架提供的路径
+                # 如果下载失败，使用框架提供的路径
                 if not temp_path:
                     temp_path = await img.convert_to_file_path()
 
