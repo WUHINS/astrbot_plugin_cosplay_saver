@@ -754,14 +754,24 @@ class ImageProcessorService:
         # 处理 GIF 动图：提取多帧拼接
         temp_file = None
         try:
-            actual_img_path = await self._prepare_image_for_vlm(img_path)
+            actual_img_path, is_animated = await self._prepare_image_for_vlm(img_path)
             if actual_img_path != img_path:
                 temp_file = actual_img_path  # 标记为临时文件，分析后删除
 
             # 构建图片 URL（file:// 协议）
             file_url = f"file:///{actual_img_path.replace(chr(92), '/')}"
 
-            result = await self._do_vlm_call(provider_id, prompt, file_url)
+            # 如果是动图拼接，添加专用提示词前缀
+            actual_prompt = prompt
+            if is_animated:
+                animated_prefix = (
+                    "[动图帧序列] 这是一张 GIF 动图的关键帧横向拼接，"
+                    "从左到右按时间顺序展示了动画过程。"
+                    "请理解这些帧是一个连贯的动画，分析整体动作和情绪变化。\n\n"
+                )
+                actual_prompt = animated_prefix + prompt
+
+            result = await self._do_vlm_call(provider_id, actual_prompt, file_url)
             return result
         finally:
             # 清理临时文件
@@ -772,21 +782,21 @@ class ImageProcessorService:
                 except Exception as e:
                     logger.warning(f"清理临时文件失败: {e}")
 
-    async def _prepare_image_for_vlm(self, img_path: str) -> str:
+    async def _prepare_image_for_vlm(self, img_path: str) -> tuple[str, bool]:
         """为 VLM 分析准备图片，对动图提取多帧拼接。
 
         Args:
             img_path: 原始图片路径
 
         Returns:
-            str: 准备好的图片路径（可能是临时文件）
+            tuple[str, bool]: (准备好的图片路径, 是否为动图拼接)
         """
         # 只处理 GIF 文件
         if not img_path.lower().endswith(".gif"):
-            return img_path
+            return img_path, False
 
         if PILImage is None:
-            return img_path
+            return img_path, False
 
         try:
             # 检测是否为动图
@@ -803,7 +813,7 @@ class ImageProcessorService:
 
             # 非动图或帧数太少，直接返回原路径
             if not is_animated or n_frames <= 1:
-                return img_path
+                return img_path, False
 
             # 动图处理：提取关键帧并横向拼接
             MAX_FRAMES = 6  # 最多提取 6 帧
@@ -853,11 +863,11 @@ class ImageProcessorService:
                 f"GIF 动图拼接完成: {n_frames} 帧 -> {actual_frames} 帧, "
                 f"输出尺寸: {frame_width * actual_frames}x{frame_height}"
             )
-            return temp_path
+            return temp_path, True
 
         except Exception as e:
             logger.warning(f"GIF 动图帧提取失败，使用原图: {e}")
-            return img_path
+            return img_path, False
 
     async def _do_vlm_call(
         self, provider_id: str, prompt: str, file_url: str
