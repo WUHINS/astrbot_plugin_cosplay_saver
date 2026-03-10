@@ -56,6 +56,27 @@ class TaskScheduler:
             logger.error(f"创建任务 {name} 失败: {e}")
             return None
 
+    async def create_task_async(
+        self, name: str, coro: Coroutine[Any, Any, Any], replace_existing: bool = True
+    ) -> asyncio.Task[Any] | None:
+        """创建一个新的后台任务（异步版本，会等待旧任务完成）。
+
+        Args:
+            name: 任务名称
+            coro: 协程对象
+            replace_existing: 如果任务已存在，是否替换
+
+        Returns:
+            创建的任务对象，如果任务已存在且不替换则返回None
+        """
+        if name in self._tasks:
+            if replace_existing:
+                await self.cancel_task(name)
+            else:
+                return None
+
+        return self.create_task(name, coro, replace_existing=False)
+
     async def cancel_task(self, name: str) -> bool:
         """取消指定名称的任务。
 

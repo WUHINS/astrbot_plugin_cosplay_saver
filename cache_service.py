@@ -15,7 +15,7 @@ class CacheService:
     # 缓存最大大小
     _CACHE_MAX_SIZE = 100
 
-    def __init__(self, cache_dir: str | Path = None):
+    def __init__(self, cache_dir: str | Path | None = None):
         """初始化缓存服务。
 
         Args:
@@ -139,7 +139,7 @@ class CacheService:
             cache.clear()
             cache.update(items_to_keep)
 
-    def get(self, cache_name: str, key: str) -> Any | None:
+    async def get(self, cache_name: str, key: str) -> Any | None:
         """从指定类型的缓存中获取数据。
 
         Args:
@@ -149,8 +149,9 @@ class CacheService:
         Returns:
             缓存的值，如果不存在则返回None
         """
-        if cache_name in self._caches:
-            return self._caches[cache_name].get(key)
+        async with self._cache_lock:
+            if cache_name in self._caches:
+                return self._caches[cache_name].get(key)
         return None
 
     async def set(
@@ -407,14 +408,18 @@ class CacheService:
                             # 备份旧文件（带错误检查）
                             backup_path = old_path.with_suffix(".json.backup")
                             try:
-                                await asyncio.to_thread(shutil.copy2, old_path, backup_path)
+                                await asyncio.to_thread(
+                                    shutil.copy2, old_path, backup_path
+                                )
                                 # 验证备份是否成功
                                 if backup_path.exists():
                                     logger.info(f"已备份旧索引文件到: {backup_path}")
                                 else:
                                     logger.warning(f"备份文件创建失败: {backup_path}")
                             except Exception as backup_err:
-                                logger.warning(f"备份旧索引文件失败: {backup_err}，继续迁移")
+                                logger.warning(
+                                    f"备份旧索引文件失败: {backup_err}，继续迁移"
+                                )
 
                     except Exception as e:
                         logger.error(f"迁移文件 {old_path} 失败: {e}")

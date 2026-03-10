@@ -99,7 +99,9 @@ class WebServer:
                 self.plugin.categories = category_keys
 
     @staticmethod
-    def _remove_category_items_inplace(current: dict[str, Any], category_key: str) -> None:
+    def _remove_category_items_inplace(
+        current: dict[str, Any], category_key: str
+    ) -> None:
         for path_str, meta in list(current.items()):
             if isinstance(meta, dict) and meta.get("category") == category_key:
                 del current[path_str]
@@ -138,8 +140,8 @@ class WebServer:
                 if image_hash and hasattr(self.plugin, "image_processor_service"):
                     try:
                         self.plugin.image_processor_service.invalidate_cache(image_hash)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"缓存失效失败: {image_hash}, {e}")
             except Exception as e:
                 logger.warning(f"删除分类文件失败: {old_path}, 错误: {e}")
 
@@ -199,7 +201,13 @@ class WebServer:
         if isinstance(scene_raw, list):
             raw_items = scene_raw
         else:
-            raw_items = str(scene_raw).replace("、", ",").replace("，", ",").replace("；", ",").split(",")
+            raw_items = (
+                str(scene_raw)
+                .replace("、", ",")
+                .replace("，", ",")
+                .replace("；", ",")
+                .split(",")
+            )
 
         seen: set[str] = set()
         scenes: list[str] = []
@@ -669,7 +677,10 @@ class WebServer:
                     if search_query and not (
                         any(search_query in str(t).lower() for t in item["tags"])
                         or search_query in item["desc"].lower()
-                        or any(search_query in str(scene).lower() for scene in item.get("scenes", []))
+                        or any(
+                            search_query in str(scene).lower()
+                            for scene in item.get("scenes", [])
+                        )
                     ):
                         continue
 
@@ -961,7 +972,9 @@ class WebServer:
         if not expected:
             return self._ok(requires_auth=False)
 
-        payload = await self._read_json_payload(request, default={}, swallow_errors=True)
+        payload = await self._read_json_payload(
+            request, default={}, swallow_errors=True
+        )
 
         provided = str((payload or {}).get("password", "") or "").strip()
         if not provided or not hmac.compare_digest(provided, expected):
@@ -1120,12 +1133,15 @@ class WebServer:
                 return self._err("至少需要保留1个分类", 400)
 
             updated_categories = [c for c in current_categories if c != category_key]
-            deleted_missing_count, deleted_file_count = (
-                await self._delete_category_files_from_index_snapshot(category_key)
-            )
+            (
+                deleted_missing_count,
+                deleted_file_count,
+            ) = await self._delete_category_files_from_index_snapshot(category_key)
 
             await self.plugin.cache_service.update_index(
-                lambda current: self._remove_category_items_inplace(current, category_key)
+                lambda current: self._remove_category_items_inplace(
+                    current, category_key
+                )
             )
 
             deleted_file_count += await self._delete_category_dir_and_count_orphans(
@@ -1158,10 +1174,9 @@ class WebServer:
             logger.error(f"获取情绪分类失败: {e}")
             return self._err(str(e))
 
-
     async def handle_analyze_image(self, request: web.Request) -> web.Response:
         """使用VLM分析图片并返回分类、标签和描述建议。
-        
+
         复用 ImageProcessorService.classify_image 方法，避免重复实现。
         """
         try:
@@ -1174,7 +1189,7 @@ class WebServer:
             # 读取上传的文件
             reader = await request.multipart()
             file_field = await reader.next()
-            
+
             if not file_field or file_field.name != "file":
                 return self._err("未找到上传文件", 400)
 
@@ -1185,14 +1200,20 @@ class WebServer:
 
             # 验证文件类型
             content_type = file_field.headers.get("Content-Type", "")
-            allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"}
+            allowed_types = {
+                "image/jpeg",
+                "image/png",
+                "image/gif",
+                "image/webp",
+                "image/bmp",
+            }
             if content_type not in allowed_types:
                 return self._err(f"不支持的文件类型: {content_type}", 400)
 
             # 保存到临时文件
             temp_dir = Path(self.data_dir) / "temp"
             temp_dir.mkdir(parents=True, exist_ok=True)
-            
+
             file_ext = {
                 "image/jpeg": ".jpg",
                 "image/png": ".png",
@@ -1200,7 +1221,7 @@ class WebServer:
                 "image/webp": ".webp",
                 "image/bmp": ".bmp",
             }.get(content_type, ".jpg")
-            
+
             temp_filename = f"analyze_{uuid.uuid4().hex}{file_ext}"
             temp_path = temp_dir / temp_filename
 
@@ -1209,7 +1230,13 @@ class WebServer:
                 await asyncio.to_thread(temp_path.write_bytes, file_content)
 
                 # 调用现有的 classify_image 方法（复用提示词和解析逻辑）
-                category, tags, desc, emotion, scenes = await image_processor.classify_image(
+                (
+                    category,
+                    tags,
+                    desc,
+                    emotion,
+                    scenes,
+                ) = await image_processor.classify_image(
                     event=None,
                     file_path=str(temp_path),
                     categories=list(self.plugin.plugin_config.categories or []),
@@ -1224,12 +1251,14 @@ class WebServer:
                 if not category:
                     return self._err("无法识别图片分类", 500)
 
-                return self._ok({
-                    "category": category,
-                    "tags": tags,
-                    "description": desc,
-                    "scenes": scenes or [],
-                })
+                return self._ok(
+                    {
+                        "category": category,
+                        "tags": tags,
+                        "description": desc,
+                        "scenes": scenes or [],
+                    }
+                )
 
             finally:
                 # 清理临时文件
@@ -1244,7 +1273,9 @@ class WebServer:
             return self._err("文件处理失败", 500)
         except ValueError as e:
             if "未配置视觉模型" in str(e):
-                return self._err("未配置视觉模型(vision_provider_id)，请在插件配置中设置", 400)
+                return self._err(
+                    "未配置视觉模型(vision_provider_id)，请在插件配置中设置", 400
+                )
             return self._err(f"配置错误: {str(e)}", 500)
         except Exception as e:
             logger.error(f"VLM分析失败: {e}", exc_info=True)

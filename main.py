@@ -92,6 +92,7 @@ class Main(Star):
         self.backend_tag: str = self.BACKEND_TAG
         self._migration_done: bool = False  # 迁移只执行一次
         self._auto_emoji_cooldowns: dict[str, float] = {}
+        self._auto_emoji_cooldowns_lock = asyncio.Lock()
         self._terminated: bool = False  # 终止标志位，防止重复清理
         # 强制捕获窗口已迁移到 EventHandler
 
@@ -300,21 +301,22 @@ class Main(Star):
         except Exception:
             return "", ""
 
-    def is_send_enabled_for_event(self, event: AstrMessageEvent) -> bool:
+    def _is_action_enabled_for_event(
+        self, action: str, event: AstrMessageEvent
+    ) -> bool:
+        """检查指定操作是否在当前事件中启用。"""
         if self.plugin_config is None:
             return True
         try:
-            return bool(self.plugin_config.is_action_allowed("send", event))
+            return bool(self.plugin_config.is_action_allowed(action, event))
         except Exception:
             return True
 
+    def is_send_enabled_for_event(self, event: AstrMessageEvent) -> bool:
+        return self._is_action_enabled_for_event("send", event)
+
     def is_steal_enabled_for_event(self, event: AstrMessageEvent) -> bool:
-        if self.plugin_config is None:
-            return True
-        try:
-            return bool(self.plugin_config.is_action_allowed("steal", event))
-        except Exception:
-            return True
+        return self._is_action_enabled_for_event("steal", event)
 
     def is_meme_enabled_for_event(self, event: AstrMessageEvent) -> bool:
         return self.is_send_enabled_for_event(event)
@@ -982,12 +984,14 @@ class Main(Star):
                 user_query = ""
                 try:
                     user_query = event.get_message_str() or ""
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"获取用户消息失败: {e}")
                 logger.debug("[Stealer] LLM模式：保持消息链不变，异步分析语义")
                 self._safe_create_task(
                     self._async_analyze_and_send_emoji(
-                        event, text_without_explicit, [],
+                        event,
+                        text_without_explicit,
+                        [],
                         user_query=user_query,
                     ),
                     name="emoji_analyze_intelligent",
@@ -1082,14 +1086,15 @@ class Main(Star):
 
         return False
 
-    def _is_auto_emoji_cooldown_ready(self, event: AstrMessageEvent) -> bool:
+    async def _is_auto_emoji_cooldown_ready(self, event: AstrMessageEvent) -> bool:
         session_key = self._get_auto_emoji_session_key(event)
         if not session_key:
             return True
 
         now = asyncio.get_running_loop().time()
-        self._prune_auto_emoji_cooldowns(now)
-        last_sent_at = self._auto_emoji_cooldowns.get(session_key, 0.0)
+        async with self._auto_emoji_cooldowns_lock:
+            self._prune_auto_emoji_cooldowns(now)
+            last_sent_at = self._auto_emoji_cooldowns.get(session_key, 0.0)
         return now - last_sent_at >= self.AUTO_EMOJI_COOLDOWN_SECONDS
 
     def _prune_auto_emoji_cooldowns(self, now: float) -> None:
@@ -1102,13 +1107,14 @@ class Main(Star):
         for key in expired_keys:
             self._auto_emoji_cooldowns.pop(key, None)
 
-    def _mark_auto_emoji_sent(self, event: AstrMessageEvent) -> None:
+    async def _mark_auto_emoji_sent(self, event: AstrMessageEvent) -> None:
         session_key = self._get_auto_emoji_session_key(event)
         if not session_key:
             return
         now = asyncio.get_running_loop().time()
-        self._prune_auto_emoji_cooldowns(now)
-        self._auto_emoji_cooldowns[session_key] = now
+        async with self._auto_emoji_cooldowns_lock:
+            self._prune_auto_emoji_cooldowns(now)
+            self._auto_emoji_cooldowns[session_key] = now
 
     async def _try_send_emoji(
         self, event: AstrMessageEvent, emotions: list[str], cleaned_text: str
@@ -1117,8 +1123,12 @@ class Main(Star):
         return await self.emoji_selector.try_send_emoji(event, emotions, cleaned_text)
 
     async def _async_analyze_and_send_emoji(
-        self, event: AstrMessageEvent, text: str, emotions: list[str],
-        *, user_query: str = "",
+        self,
+        event: AstrMessageEvent,
+        text: str,
+        emotions: list[str],
+        *,
+        user_query: str = "",
     ):
         """异步分析情绪并发送表情包（不阻塞主流程）。
 
@@ -1140,11 +1150,11 @@ class Main(Star):
                 return
 
             if self._should_skip_auto_emoji_by_gate(text):
-                logger.debug("[Stealer] ????????????????")
+                logger.debug("[Stealer] 根据内容门槛跳过自动发送")
                 return
 
-            if not self._is_auto_emoji_cooldown_ready(event):
-                logger.debug("[Stealer] ???????????????")
+            if not await self._is_auto_emoji_cooldown_ready(event):
+                logger.debug("[Stealer] 自动发送冷却中，跳过")
                 return
 
             # 判断模式
@@ -1158,7 +1168,8 @@ class Main(Star):
                 try:
                     analyzed_emotion = (
                         await self.smart_emotion_matcher.analyze_and_match_emotion(
-                            event, text,
+                            event,
+                            text,
                             use_natural_analysis=True,
                             user_query=user_query,
                         )
@@ -1188,7 +1199,7 @@ class Main(Star):
             # 尝试发送表情包
             sent = await self._try_send_emoji(event, final_emotions, text)
             if sent:
-                self._mark_auto_emoji_sent(event)
+                await self._mark_auto_emoji_sent(event)
 
         except Exception as e:
             logger.error(f"[Stealer] 异步发送表情包失败: {e}", exc_info=True)

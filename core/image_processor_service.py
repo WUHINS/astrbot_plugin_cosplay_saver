@@ -13,8 +13,19 @@ from astrbot.api.event import AstrMessageEvent
 
 try:
     from PIL import Image as PILImage
+
+    try:
+        LANCZOS = PILImage.Resampling.LANCZOS
+    except AttributeError:
+        LANCZOS = PILImage.LANCZOS
 except Exception:
     PILImage = None
+    LANCZOS = None
+
+try:
+    import numpy as np
+except Exception:
+    np = None
 
 
 class ImageProcessorService:
@@ -681,7 +692,10 @@ class ImageProcessorService:
             scenes_str = parts[3] if len(parts) > 3 else ""
             scenes_result = [
                 s.strip()
-                for s in scenes_str.replace("，", ",").replace("、", ",").replace("；", ",").split(",")
+                for s in scenes_str.replace("，", ",")
+                .replace("、", ",")
+                .replace("；", ",")
+                .split(",")
                 if s.strip()
             ]
 
@@ -803,7 +817,7 @@ class ImageProcessorService:
         if not img_path.lower().endswith(".gif"):
             return img_path, False
 
-        if PILImage is None:
+        if PILImage is None or np is None:
             return img_path, False
 
         try:
@@ -833,12 +847,10 @@ class ImageProcessorService:
             frame_width = int(width * scale)
             frame_height = TARGET_HEIGHT
 
-            def _extract_and_combine(fp: str) -> str:
-                import numpy as np
-                
+            def _extract_and_combine(fp: str) -> tuple[str, int]:
                 frames = []
                 last_selected_np = None
-                
+
                 with PILImage.open(fp) as im:
                     # 先提取所有帧
                     all_frames = []
@@ -846,15 +858,13 @@ class ImageProcessorService:
                         im.seek(idx)
                         frame = im.convert("RGBA")
                         if scale < 1.0:
-                            frame = frame.resize(
-                                (frame_width, frame_height), PILImage.LANCZOS
-                            )
+                            frame = frame.resize((frame_width, frame_height), LANCZOS)
                         all_frames.append(frame)
-                
+
                 # 相似帧过滤
                 for frame in all_frames:
                     frame_np = np.array(frame, dtype=np.float32)
-                    
+
                     if last_selected_np is None:
                         # 第一帧直接加入
                         frames.append(frame)
@@ -862,18 +872,20 @@ class ImageProcessorService:
                     else:
                         # 计算均方误差 (MSE)
                         mse = np.mean((frame_np - last_selected_np) ** 2)
-                        
+
                         # 差异够大才选中
                         if mse > SIMILARITY_THRESHOLD:
                             frames.append(frame)
                             last_selected_np = frame_np
-                
+
                 # 如果过滤后帧数太少，保留更多帧
                 if len(frames) < 3 and len(all_frames) >= 3:
                     # 均匀采样
                     step = max(1, len(all_frames) // 6)
-                    frames = [all_frames[i] for i in range(0, len(all_frames), step)][:6]
-                
+                    frames = [all_frames[i] for i in range(0, len(all_frames), step)][
+                        :6
+                    ]
+
                 # 限制最大帧数
                 if len(frames) > MAX_FRAMES:
                     # 均匀抽取
@@ -882,23 +894,33 @@ class ImageProcessorService:
 
                 # 横向拼接所有帧，黑色背景代表透明
                 total_width = frame_width * len(frames)
-                combined = PILImage.new("RGBA", (total_width, frame_height), (0, 0, 0, 255))
+                combined = PILImage.new(
+                    "RGBA", (total_width, frame_height), (0, 0, 0, 255)
+                )
 
                 for i, frame in enumerate(frames):
-                    combined.paste(frame, (i * frame_width, 0), frame)  # 使用帧的 alpha 通道
+                    combined.paste(
+                        frame, (i * frame_width, 0), frame
+                    )  # 使用帧的 alpha 通道
 
                 # 保存临时文件
                 import tempfile
+
                 temp_fd, temp_path = tempfile.mkstemp(suffix=".jpg")
                 os.close(temp_fd)
                 # 转为 RGB 保存为 JPEG（黑色背景）
                 combined_rgb = PILImage.new("RGB", combined.size, (0, 0, 0))
-                combined_rgb.paste(combined, mask=combined.split()[3] if combined.mode == "RGBA" else None)
+                if combined.mode == "RGBA":
+                    combined_rgb.paste(combined, mask=combined.split()[3])
+                else:
+                    combined_rgb.paste(combined)
                 combined_rgb.save(temp_path, "JPEG", quality=90)
 
-                return temp_path
+                return temp_path, len(frames)
 
-            temp_path = await asyncio.to_thread(_extract_and_combine, img_path)
+            temp_path, actual_frames = await asyncio.to_thread(
+                _extract_and_combine, img_path
+            )
             logger.debug(
                 f"GIF 动图拼接完成: {n_frames} 帧 -> {actual_frames} 帧, "
                 f"输出尺寸: {frame_width * actual_frames}x{frame_height}"
@@ -909,9 +931,7 @@ class ImageProcessorService:
             logger.warning(f"GIF 动图帧提取失败，使用原图: {e}")
             return img_path, False
 
-    async def _do_vlm_call(
-        self, provider_id: str, prompt: str, file_url: str
-    ) -> str:
+    async def _do_vlm_call(self, provider_id: str, prompt: str, file_url: str) -> str:
         """执行 VLM 调用（带重试）。
 
         Args:
@@ -1036,24 +1056,22 @@ class ImageProcessorService:
 
     def _evict_gif_base64_cache(self) -> None:
         """淘汰 _gif_base64_cache 中最旧的条目，保持在最大容量以内。"""
-        # 检查条目数量
-        if len(self._gif_base64_cache) <= self._gif_base64_cache_max_size:
-            # 还需要检查总字节数
-            total_bytes = sum(len(v[1]) for v in self._gif_base64_cache.values())
-            if total_bytes <= self.GIF_CACHE_MAX_SIZE_BYTES:
-                return
+        total_bytes = sum(len(v[1]) for v in self._gif_base64_cache.values())
 
-        # 按时间排序，淘汰旧条目
+        if (
+            len(self._gif_base64_cache) <= self._gif_base64_cache_max_size
+            and total_bytes <= self.GIF_CACHE_MAX_SIZE_BYTES
+        ):
+            return
+
         sorted_items = sorted(
             self._gif_base64_cache.items(),
-            key=lambda kv: kv[1][0],  # cached_at timestamp
+            key=lambda kv: kv[1][0],
         )
 
-        # 计算需要保留的条目
-        target_count = self._gif_base64_cache_max_size // 2
-        target_bytes = self.GIF_CACHE_MAX_SIZE_BYTES // 2
+        target_count = max(1, self._gif_base64_cache_max_size // 2)
+        target_bytes = max(1024 * 1024, self.GIF_CACHE_MAX_SIZE_BYTES // 2)
 
-        # 从新到旧保留，直到满足条件
         keep_items = []
         current_bytes = 0
         for key, value in reversed(sorted_items):
@@ -1113,13 +1131,6 @@ class ImageProcessorService:
                 return cached_b64
 
         try:
-            if file_path.lower().endswith(".gif"):
-                b64 = await self._file_to_base64(file_path)
-                if b64:
-                    self._gif_base64_cache[cache_key] = (now, b64)
-                    self._evict_gif_base64_cache()
-                return b64
-
             if PILImage is None:
                 return await self._file_to_base64(file_path)
 
@@ -1136,7 +1147,7 @@ class ImageProcessorService:
 
                     # 检查图片尺寸
                     width, height = im.size
-                    
+
                     # 计算缩放比例（如果需要）
                     scale = 1.0
                     if width > MAX_DIMENSION or height > MAX_DIMENSION:
@@ -1164,7 +1175,7 @@ class ImageProcessorService:
                             frame = im.convert("RGBA")
                             # 缩放帧
                             if scale < 1.0:
-                                frame = frame.resize((new_width, new_height), PILImage.LANCZOS)
+                                frame = frame.resize((new_width, new_height), LANCZOS)
                             frames.append(frame)
                             durations.append(int(im.info.get("duration", 100) or 100))
 
@@ -1186,7 +1197,7 @@ class ImageProcessorService:
                         frame = im.convert("RGBA")
                         # 缩放
                         if scale < 1.0:
-                            frame = frame.resize((new_width, new_height), PILImage.LANCZOS)
+                            frame = frame.resize((new_width, new_height), LANCZOS)
                         frame.save(buf, format="GIF")
 
                     return base64.b64encode(buf.getvalue()).decode("utf-8")

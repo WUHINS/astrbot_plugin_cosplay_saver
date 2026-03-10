@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1] - 2026-03-10
+- 修复 GIF 识别 bug：Pillow 版本兼容性处理 (LANCZOS 常量)
+- 修复 numpy 导入问题：移至模块级别，避免 GIF 帧提取时的重复导入
+- 并发安全优化：CacheService.get() 和自动表情冷却机制添加异步锁保护
+- 修复日志中文乱码问题
+- 代码质量：类型注解修复、异常日志改进
+
 ## [2.4.0] - 2026-03-08
 - 群聊过滤升级为目标过滤：偷表情与发表情分离配置，支持 `group:群号` 与 `user:QQ号`
 - 命令入口整理为 `command_group` 结构，保留 `/meme 偷`，优化名单帮助与状态输出
