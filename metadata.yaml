@@ -1,9 +1,12 @@
-name: astrbot_plugin_stealer
-display_name: 表情包小偷
-desc: 全人机代码，仿maibot的表情包偷取。让bot自动偷走别人的表情包并为己所用。配置好视觉模型就能自动识别分类，对话时根据情绪自动发送。支持LLM主动选表情包、WebUI管理、智能情绪匹配。
-version: 2.4.1
-author: nagatoquin33
-repo: https://github.com/nagatoquin33/astrbot_plugin_stealer
+name: astrbot_plugin_cosplay_saver
+display_name: 女装图片保存助手
+desc: 自动识别并保存群友的女装图片到对应目录。使用视觉模型（VLM）进行 AI 识别，支持宽松判断策略，确保不漏掉任何女装图片。图片按 群号/群员 QQ 号_QQ 名 的目录结构自动组织，支持 SMTP 邮件推送每日统计日报。
+version: 1.1.0
+author: WUHINS
+repo: https://github.com/WUHINS/astrbot_plugin_cosplay_saver
 astrbot_version: ">=4.10.4"
 support_platforms:
   - aiocqhttp
+  - aiotoucan
+  - qq_official
+  - gewechat

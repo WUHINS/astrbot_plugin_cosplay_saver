@@ -1,100 +1,37 @@
 {
-  "_steal_section": {
-    "description": "=== 偷图设置 ===",
+  "_cosplay_section": {
+    "description": "=== 女装图片保存 ===",
     "type": "text",
     "invisible": true
   },
-  "steal_emoji": {
-    "description": "开启表情包偷取功能",
+  "save_cosplay_images": {
+    "description": "开启女装图片保存",
     "type": "bool",
-    "default": true
+    "default": true,
+    "hint": "✅ 开启：自动识别并保存群友的女装图片到独立目录\n❌ 关闭：不保存女装图片\n\n📁 保存路径：数据目录/cosplay/群号/群员 QQ 号_QQ 名/图片文件"
   },
-  "steal_mode": {
-    "description": "偷图模式",
+  "cosplay_vision_provider_id": {
+    "description": "女装识别专用模型",
     "type": "string",
-    "default": "probability",
-    "options": ["probability", "cooldown"],
-    "hint": "probability=概率模式：每次收到图片按概率决定是否偷取\ncooldown=冷却模式：两次偷取之间必须间隔指定秒数"
+    "hint": "留空则使用默认视觉模型，建议使用识别能力较强的模型",
+    "_special": "select_provider"
   },
-  "steal_chance": {
-    "description": "偷图概率（概率模式生效）",
+  "cosplay_detection_threshold": {
+    "description": "女装识别阈值",
     "type": "float",
     "default": 0.6,
     "slider": {
-      "min": 0.0,
-      "max": 1.0,
-      "step": 0.1
+      "min": 0.3,
+      "max": 0.9,
+      "step": 0.05
     },
-    "hint": "概率模式下每次收到图片时尝试偷取的概率，0.0=从不偷取，1.0=每次都偷。建议 0.4-0.8"
+    "hint": "识别阈值越低越容易判定为女装（宽松），越高越严格。建议 0.5-0.7"
   },
-  "image_processing_cooldown": {
-    "description": "偷图冷却时间/秒（冷却模式生效）",
-    "type": "int",
-    "default": 10,
-    "slider": {
-      "min": 0,
-      "max": 120,
-      "step": 5
-    },
-    "hint": "冷却模式下两次偷取之间的最小间隔（秒）。0=不限制"
-  },
-  "content_filtration": {
-    "description": "内容审核（过滤不当图片）",
+  "ignore_gif": {
+    "description": "忽略 GIF 图片",
     "type": "bool",
-    "default": false
-  },
-
-  "_send_section": {
-    "description": "=== 发送设置 ===",
-    "type": "text",
-    "invisible": true
-  },
-  "auto_send": {
-    "description": "自动随聊发送表情包",
-    "type": "bool",
-    "default": true
-  },
-  "emoji_chance": {
-    "description": "表情包发送概率",
-    "type": "float",
-    "default": 0.4,
-    "slider": {
-      "min": 0.0,
-      "max": 1.0,
-      "step": 0.1
-    },
-    "hint": "自动发送表情包的概率，0.0=从不发送，1.0=每次都发送，建议 0.2-0.6"
-  },
-  "send_emoji_as_gif": {
-    "description": "真表情包样式（GIF发送）",
-    "type": "bool",
-    "default": true,
-    "hint": "✅ 开启：以 GIF 输出（更接近真表情包样式）\n❌ 关闭：按原文件格式发送（png/jpg/gif 等）\n\n⚠️ 开启后高频发送大图/动图场景会有较高瞬时内存占用"
-  },
-
-  "smart_emoji_selection": {
-    "description": "智能表情包选择",
-    "type": "bool",
-    "default": true,
-    "hint": "✅ 开启=综合评分选择（多样性+匹配度+相似度）\n❌ 关闭=随机选择（仍会避免短期重复）"
-  },
-
-  "_emotion_section": {
-    "description": "=== 情绪识别 ===",
-    "type": "text",
-    "invisible": true
-  },
-  "enable_natural_emotion_analysis": {
-    "description": "情绪识别模式",
-    "type": "bool",
-    "default": true,
-    "hint": "✅ 开启=LLM模式（轻量模型分析语义，不修改LLM回复）\n❌ 关闭=被动标签模式（LLM插入情绪标签，会修改回复内容）\n\n⚠️ 切换模式后建议使用 /reset 清除对话上下文"
-  },
-  "emotion_analysis_provider_id": {
-    "description": "情绪分析专用模型（LLM模式）",
-    "type": "string",
-    "hint": "留空则使用当前会话模型，建议使用轻量免费模型",
-    "_special": "select_provider"
+    "default": false,
+    "hint": "✅ 开启：跳过所有 GIF 图片，不检测不保存\n❌ 关闭：正常处理 GIF 图片（会提取关键帧识别）"
   },
 
   "_model_section": {
@@ -109,94 +46,86 @@
     "_special": "select_provider"
   },
 
-  "_group_section": {
-    "description": "=== 目标过滤 ===",
-    "type": "text",
-    "invisible": true
-  },
-  "send_target_whitelist": {
-    "description": "发表情白名单",
-    "type": "list",
-    "default": [],
-    "hint": "格式：group:群号 或 user:QQ号。非空时仅白名单目标可触发发表情"
-  },
-  "send_target_blacklist": {
-    "description": "发表情黑名单",
-    "type": "list",
-    "default": [],
-    "hint": "格式：group:群号 或 user:QQ号。白名单为空时生效，黑名单目标不触发发表情"
-  },
-  "steal_target_whitelist": {
-    "description": "偷表情白名单",
-    "type": "list",
-    "default": [],
-    "hint": "格式：group:群号 或 user:QQ号。非空时仅白名单目标可触发偷表情"
-  },
-  "steal_target_blacklist": {
-    "description": "偷表情黑名单",
-    "type": "list",
-    "default": [],
-    "hint": "格式：group:群号 或 user:QQ号。白名单为空时生效，黑名单目标不触发偷表情"
-  },
-  "_storage_section": {
-    "description": "=== 存储管理 ===",
+  "_advanced_section": {
+    "description": "=== 高级配置 ===",
     "type": "text",
     "invisible": true
   },
   "max_reg_num": {
-    "description": "最大表情包数量",
+    "description": "最大缓存数量",
     "type": "int",
     "default": 100,
-    "slider": {
-      "min": 10,
-      "max": 2000,
-      "step": 10
-    },
-    "hint": "表情包存储上限，超过后自动清理旧表情包"
+    "hint": "图片检测缓存上限"
+  },
+  "content_filtration": {
+    "description": "内容审核",
+    "type": "bool",
+    "default": false,
+    "hint": "过滤不当图片"
+  },
+  "image_processing_cooldown": {
+    "description": "图片处理冷却时间/秒",
+    "type": "int",
+    "default": 10,
+    "hint": "两次图片处理之间的最小间隔（秒）。0=不限制"
   },
 
-  "_webui_section": {
-    "description": "=== WebUI 管理界面 ===",
+  "_smtp_section": {
+    "description": "=== SMTP 邮件推送 ===",
     "type": "text",
     "invisible": true
   },
-  "webui": {
-    "description": "WebUI 管理界面配置",
+  "smtp": {
+    "description": "SMTP 邮件配置",
     "type": "object",
     "items": {
       "enabled": {
-        "description": "启用 WebUI",
+        "description": "启用邮件推送",
         "type": "bool",
-        "default": true
+        "default": false,
+        "hint": "✅ 开启：每天定时发送日报到邮箱\n❌ 关闭：不发送邮件"
       },
-      "host": {
-        "description": "监听地址",
-        "type": "string",
-        "default": "0.0.0.0",
-        "hint": "0.0.0.0=允许外部访问，127.0.0.1=仅本地访问"
-      },
-      "port": {
-        "description": "监听端口",
-        "type": "int",
-        "default": 8899
-      },
-      "auth_enabled": {
-        "description": "启用登录验证",
-        "type": "bool",
-        "default": true,
-        "hint": "✅ 开启：访问需登录（推荐）\n❌ 关闭：无需登录（仅建议内网使用）"
-      },
-      "password": {
-        "description": "访问密码",
+      "smtp_server": {
+        "description": "SMTP 服务器",
         "type": "string",
         "default": "",
-        "hint": "仅在登录验证开启时生效。留空将自动生成 6 位随机密码"
+        "hint": "例如：smtp.qq.com, smtp.gmail.com, smtp.163.com"
       },
-      "session_timeout": {
-        "description": "会话超时时间/秒",
+      "smtp_port": {
+        "description": "SMTP 端口",
         "type": "int",
-        "default": 3600,
-        "hint": "登录会话有效时长，超时需重新登录"
+        "default": 587,
+        "hint": "TLS 加密端口：587（推荐）或 465；非加密：25"
+      },
+      "sender_email": {
+        "description": "发件人邮箱",
+        "type": "string",
+        "default": "",
+        "hint": "发送邮件的邮箱地址"
+      },
+      "sender_password": {
+        "description": "邮箱授权码",
+        "type": "string",
+        "default": "",
+        "hint": "邮箱授权码或密码（非登录密码，需在邮箱设置中获取）"
+      },
+      "receiver_email": {
+        "description": "收件人邮箱",
+        "type": "string",
+        "default": "",
+        "hint": "接收日报的邮箱地址"
+      },
+      "use_tls": {
+        "description": "使用 TLS 加密",
+        "type": "bool",
+        "default": true,
+        "hint": "✅ 开启：使用 TLS 加密连接（推荐）\n❌ 关闭：不使用加密"
+      },
+      "send_time": {
+        "description": "发送时间",
+        "type": "string",
+        "default": "08:00",
+        "hint": "每日发送时间（24 小时制），例如：08:00, 20:00"
       }
     }
   }

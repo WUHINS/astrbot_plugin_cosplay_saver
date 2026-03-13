@@ -18,20 +18,24 @@ class WebuiConfig(BaseModel):
     session_timeout: int = 3600
 
 
-class PluginConfig(BaseModel):
-    # === 基础功能 ===
-    steal_emoji: bool = True
-    steal_mode: str = "probability"  # "probability" 或 "cooldown"
-    steal_chance: float = 0.6  # 概率模式下的偷图概率
-    auto_send: bool = True
-    emoji_chance: float = 0.4
-    send_emoji_as_gif: bool = True
+class SMTPConfig(BaseModel):
+    """SMTP 邮件配置"""
+    enabled: bool = False  # 是否启用邮件推送
+    smtp_server: str = ""  # SMTP 服务器地址
+    smtp_port: int = 587  # SMTP 端口（默认 587）
+    sender_email: str = ""  # 发件人邮箱
+    sender_password: str = ""  # 邮箱授权码/密码
+    receiver_email: str = ""  # 收件人邮箱
+    use_tls: bool = True  # 是否使用 TLS 加密
+    send_time: str = "08:00"  # 每日发送时间（24 小时制）
 
-    # === 群聊过滤 ===
-    steal_target_whitelist: list[str] = []
-    steal_target_blacklist: list[str] = []
-    send_target_whitelist: list[str] = []
-    send_target_blacklist: list[str] = []
+
+class PluginConfig(BaseModel):
+    # === 女装图片保存 ===
+    save_cosplay_images: bool = True  # 开启女装图片保存
+    cosplay_vision_provider_id: str = ""  # 女装识别专用模型（留空使用默认视觉模型）
+    cosplay_detection_threshold: float = 0.6  # 女装识别阈值（宽松判断）
+    ignore_gif: bool = False  # 是否忽略 GIF 图片（不检测不保存）
 
     # === 模型配置 ===
     vision_provider_id: str = ""
@@ -39,150 +43,34 @@ class PluginConfig(BaseModel):
     # === WebUI 管理界面 ===
     webui: WebuiConfig = Field(default_factory=WebuiConfig)
 
+    # === SMTP 邮件推送 ===
+    smtp: SMTPConfig = Field(default_factory=SMTPConfig)
+
     # === 内部常量/高级配置 ===
     max_reg_num: int = 100
     content_filtration: bool = False  # 内容审核开关
     image_processing_cooldown: int = 10
-    enable_natural_emotion_analysis: bool = True  # 情绪识别模式
-    emotion_analysis_provider_id: str = ""  # 情绪分析专用模型
-    smart_emoji_selection: bool = True  # 智能表情包选择
 
     # === 内化常量（不再暴露给用户） ===
-    DO_REPLACE: ClassVar[bool] = True  # 达到上限始终替换旧表情
+    DO_REPLACE: ClassVar[bool] = True  # 达到上限始终替换旧文件
     ENABLE_RAW_CLEANUP: ClassVar[bool] = True  # raw 始终自动清理
-    RAW_CLEANUP_INTERVAL: ClassVar[int] = 30  # 清理周期(分钟)，固定
+    RAW_CLEANUP_INTERVAL: ClassVar[int] = 30  # 清理周期 (分钟)，固定
     ENABLE_CAPACITY_CONTROL: ClassVar[bool] = True  # 始终启用容量控制
-    CAPACITY_CONTROL_INTERVAL: ClassVar[int] = 60  # 容量检查周期(分钟)，固定
-    RAW_RETENTION_MINUTES: ClassVar[int] = 60  # 原始图片保留时间(分钟)，固定
+    CAPACITY_CONTROL_INTERVAL: ClassVar[int] = 60  # 容量检查周期 (分钟)，固定
+    RAW_RETENTION_MINUTES: ClassVar[int] = 60  # 原始图片保留时间 (分钟)，固定
 
-    # === 分类信息 ===
-    categories: list[str] = []
-    category_info: dict[str, dict[str, str]] = {}
+    # === 表情包分类管理 ===
+    categories: list[str] = Field(default_factory=list)
+    category_info: dict[str, dict[str, str]] = Field(default_factory=dict)
 
     # === 内部状态 (不作为 Pydantic 字段) ===
     # 使用 PrivateAttr 或在 __init__ 中设置且不包含在 __annotations__ 中
     # 但 Pydantic v1/v2 处理方式不同。这里使用 __private_attributes__ 机制或直接忽略
 
-    # 忽略额外字段
-    class Config:
-        extra = "ignore"
-        arbitrary_types_allowed = True
-
-    # === 常量 ===
-    # 使用 ClassVar 标注，避免被 Pydantic 识别为字段
-    DEFAULT_CATEGORIES: ClassVar[list[str]] = [
-        "happy",
-        "sad",
-        "angry",
-        "shy",
-        "surprised",
-        "troll",
-        "cry",
-        "confused",
-        "embarrassed",
-        "love",
-        "disgust",
-        "fear",
-        "excitement",
-        "tired",
-        "sigh",
-        "thank",
-        "dumb",
-    ]
-
-    DEFAULT_CATEGORY_INFO: ClassVar[dict[str, dict[str, str]]] = {
-        "happy": {"name": "开心", "desc": "快乐、愉悦、满足、好心情"},
-        "sad": {"name": "难过", "desc": "悲伤、沮丧、失落、emo"},
-        "angry": {"name": "生气", "desc": "愤怒、恼火、不满、暴躁"},
-        "shy": {"name": "害羞", "desc": "羞涩、不好意思、腼腆"},
-        "surprised": {"name": "惊讶", "desc": "意外、震惊、惊奇、啊？"},
-        "troll": {"name": "整活", "desc": "调皮、搞怪、发癫、抽象"},
-        "cry": {"name": "哭哭", "desc": "哭泣、流泪、委屈、破防"},
-        "confused": {"name": "困惑", "desc": "迷茫、不解、疑惑、问号脸"},
-        "embarrassed": {"name": "尴尬", "desc": "社死、窘迫、为难、脚趾抠地"},
-        "love": {"name": "喜欢", "desc": "喜爱、爱慕、宠溺、心动"},
-        "disgust": {"name": "嫌弃", "desc": "厌恶、反感、讨厌、yue"},
-        "fear": {"name": "害怕", "desc": "恐惧、担心、紧张、怂"},
-        "excitement": {"name": "兴奋", "desc": "激动、亢奋、嗨、上头"},
-        "tired": {"name": "困倦", "desc": "疲惫、困、无力、想躺"},
-        "sigh": {"name": "无奈", "desc": "叹气、摆烂、算了、心累"},
-        "thank": {"name": "感谢", "desc": "道谢、感恩、收到、爱了"},
-        "dumb": {"name": "无语", "desc": "呆住、傻眼、离谱、沉默"},
-    }
-
-    DEFAULT_CATEGORY_ALIASES: ClassVar[dict[str, str]] = {
-        "开心": "happy",
-        "高兴": "happy",
-        "快乐": "happy",
-        "哈哈": "happy",
-        "笑": "happy",
-        "难过": "sad",
-        "伤心": "sad",
-        "emo": "sad",
-        "沮丧": "sad",
-        "失落": "sad",
-        "生气": "angry",
-        "愤怒": "angry",
-        "恼火": "angry",
-        "暴躁": "angry",
-        "害羞": "shy",
-        "不好意思": "shy",
-        "腼腆": "shy",
-        "惊讶": "surprised",
-        "震惊": "surprised",
-        "意外": "surprised",
-        "搞怪": "troll",
-        "整活": "troll",
-        "发癫": "troll",
-        "抽象": "troll",
-        "哭": "cry",
-        "大哭": "cry",
-        "哭哭": "cry",
-        "委屈": "cry",
-        "破防": "cry",
-        "困惑": "confused",
-        "疑惑": "confused",
-        "迷茫": "confused",
-        "问号": "confused",
-        "尴尬": "embarrassed",
-        "社死": "embarrassed",
-        "为难": "embarrassed",
-        "喜欢": "love",
-        "喜爱": "love",
-        "爱": "love",
-        "心动": "love",
-        "嫌弃": "disgust",
-        "厌恶": "disgust",
-        "反感": "disgust",
-        "yue": "disgust",
-        "害怕": "fear",
-        "恐惧": "fear",
-        "紧张": "fear",
-        "怂": "fear",
-        "兴奋": "excitement",
-        "激动": "excitement",
-        "嗨": "excitement",
-        "上头": "excitement",
-        "疲惫": "tired",
-        "困": "tired",
-        "困倦": "tired",
-        "想睡": "tired",
-        "无奈": "sigh",
-        "叹气": "sigh",
-        "摆烂": "sigh",
-        "算了": "sigh",
-        "感谢": "thank",
-        "谢谢": "thank",
-        "多谢": "thank",
-        "感恩": "thank",
-        "无语": "dumb",
-        "傻眼": "dumb",
-        "离谱": "dumb",
-        "沉默": "dumb",
-        "其它": "",
-        "其他": "",
-        "其他表情": "",
-        "其他情绪": "",
+    # 忽略额外字段 (Pydantic v1/v2 配置)
+    model_config = {
+        "extra": "ignore",
+        "arbitrary_types_allowed": True
     }
 
     def __init__(self, config: AstrBotConfig | None, context: Context | None = None):
@@ -194,7 +82,7 @@ class PluginConfig(BaseModel):
         # 2. 保存 AstrBotConfig 引用以便回写
         # 使用 object.__setattr__ 绕过 Pydantic 的 setattr 检查
         object.__setattr__(self, "_data", config)
-        object.__setattr__(self, "_plugin_name", "astrbot_plugin_stealer")
+        object.__setattr__(self, "_plugin_name", "astrbot_plugin_cosplay_saver")
 
         # 3. 初始化路径和目录
         data_dir = StarTools.get_data_dir(self._plugin_name)
@@ -204,6 +92,7 @@ class PluginConfig(BaseModel):
         object.__setattr__(self, "categories_dir", data_dir / "categories")
         object.__setattr__(self, "cache_dir", data_dir / "cache")
         object.__setattr__(self, "category_info_path", data_dir / "category_info.json")
+        object.__setattr__(self, "cosplay_dir", data_dir / "cosplay")  # 女装图片保存目录
 
         # 确保目录存在
         self.ensure_base_dirs()
@@ -260,27 +149,8 @@ class PluginConfig(BaseModel):
             if "category_info" in self._data:
                 config_info = self._data.get("category_info")
 
-        categories = (
-            stored_categories
-            if isinstance(stored_categories, list) and stored_categories
-            else config_categories
-            if isinstance(config_categories, list) and config_categories
-            else list(self.DEFAULT_CATEGORIES)
-        )
-        info = (
-            stored_info
-            if isinstance(stored_info, dict)
-            else config_info
-            if isinstance(config_info, dict)
-            else {}
-        )
-
-        # 使用 BaseModel.__setattr__ 绕过自定义 __setattr__ 中的写文件逻辑，
+        # 使用 BaseModel.__setattr__ 绕过自定义 __setattr__ 中的写文件逻辑
         # 避免初始化期间重复写文件（最后统一写一次即可）
-        BaseModel.__setattr__(self, "categories", list(categories))
-        merged_info = dict(self.DEFAULT_CATEGORY_INFO)
-        merged_info.update(info)
-        BaseModel.__setattr__(self, "category_info", merged_info)
         self.save_categories()
         self.save_category_info()
 
@@ -315,27 +185,16 @@ class PluginConfig(BaseModel):
         # 如果是私有属性或路径属性，跳过回写
         if key.startswith("_") or key in (
             "data_dir",
-            "categories_path",
+            "cosplay_dir",
             "raw_dir",
-            "categories_dir",
             "cache_dir",
-            "category_info_path",
         ):
-            return
-        if key in ("categories", "category_info"):
-            if key == "categories":
-                self.save_categories()
-            else:
-                self.save_category_info()
             return
 
         # 回写到 AstrBotConfig
         if hasattr(self, "_data") and self._data is not None:
             if hasattr(self._data, "save_config"):
                 try:
-                    # 对于 webui 这种嵌套模型，如果是直接替换整个 webui 对象，这里可以处理
-                    # 但如果是修改 webui.port，不会触发这里的 __setattr__
-                    # 需要手动调用 save_webui_config
                     if key == "webui" and isinstance(value, WebuiConfig):
                         self._data.save_config({key: value.model_dump()})
                     else:
@@ -370,21 +229,12 @@ class PluginConfig(BaseModel):
             return False
 
     def save_categories(self) -> None:
-        self._write_json_file(self.categories_path, self.categories)
+        """保存分类配置（兼容方法，实际已不使用）。"""
+        pass
 
     def save_category_info(self) -> None:
-        self._write_json_file(self.category_info_path, self.category_info)
-
-    def ensure_category_dir(self, category: str) -> Path:
-        category_dir = self.categories_dir / str(category)
-        category_dir.mkdir(parents=True, exist_ok=True)
-        return category_dir
-
-    def ensure_category_dirs(self, categories: list[str] | None) -> None:
-        if not categories:
-            return
-        for category in categories:
-            self.ensure_category_dir(category)
+        """保存分类信息（兼容方法，实际已不使用）。"""
+        pass
 
     def ensure_raw_dir(self) -> Path:
         self.raw_dir.mkdir(parents=True, exist_ok=True)
@@ -397,42 +247,8 @@ class PluginConfig(BaseModel):
     def ensure_base_dirs(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.raw_dir.mkdir(parents=True, exist_ok=True)
-        self.categories_dir.mkdir(parents=True, exist_ok=True)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-
-    def normalize_category_strict(self, category: str) -> str | None:
-        """严格归一化情绪分类。"""
-        if not category:
-            return None
-
-        category = category.lower().strip()
-
-        # 1. 直接匹配当前配置的分类列表（包括用户自定义分类）
-        if category in self.categories:
-            return category
-
-        # 2. 匹配默认分类（兜底）
-        if category in self.DEFAULT_CATEGORIES:
-            return category
-
-        # 3. 别名查找
-        return self.DEFAULT_CATEGORY_ALIASES.get(category)
-
-    def get_keyword_map(self) -> dict[str, str]:
-        """获取关键词映射表。"""
-        return self.DEFAULT_CATEGORY_ALIASES
-
-    def get_category_info(self) -> list[dict[str, str]]:
-        categories = self.categories or list(self.DEFAULT_CATEGORIES)
-        info_map = self.category_info or {}
-
-        result: list[dict[str, str]] = []
-        for key in categories:
-            info = info_map.get(key, {}) if isinstance(info_map, dict) else {}
-            name = str(info.get("name", "") or key)
-            desc = str(info.get("desc", "") or "")
-            result.append({"key": str(key), "name": name, "desc": desc})
-        return result
+        self.cosplay_dir.mkdir(parents=True, exist_ok=True)  # 女装图片保存目录
 
     def get_group_id(self, event: AstrMessageEvent) -> str:
         """获取群号。"""
@@ -442,17 +258,21 @@ class PluginConfig(BaseModel):
             return ""
 
     def get_user_id(self, event: AstrMessageEvent) -> str:
+        """获取用户 ID。"""
         try:
             user_id = event.get_sender_id()
             if user_id:
                 return str(user_id).strip()
-        except Exception:
-            pass
+        except (AttributeError, KeyError, TypeError) as e:
+            logger.debug(f"[Config] get_sender_id 失败：{e}")
+        except Exception as e:
+            logger.debug(f"[Config] 获取用户 ID 意外错误：{e}")
 
         for attr in ("sender_id", "user_id"):
             try:
                 value = getattr(event, attr, None)
-            except Exception:
+            except (AttributeError, KeyError, TypeError) as e:
+                logger.debug(f"[Config] getattr {attr} 失败：{e}")
                 value = None
             if value:
                 return str(value).strip()
@@ -463,8 +283,10 @@ class PluginConfig(BaseModel):
             user_id = getattr(sender, "user_id", None) if sender is not None else None
             if user_id:
                 return str(user_id).strip()
-        except Exception:
-            pass
+        except (AttributeError, KeyError, TypeError) as e:
+            logger.debug(f"[Config] 从 message_obj 获取用户 ID 失败：{e}")
+        except Exception as e:
+            logger.debug(f"[Config] 获取用户 ID 意外错误：{e}")
 
         return ""
 
@@ -508,42 +330,3 @@ class PluginConfig(BaseModel):
                 return f"{scope}:{target_id}"
 
         return f"{default_scope}:{raw}" if raw else ""
-
-    def _get_action_lists(self, action: str) -> tuple[list[str], list[str]]:
-        normalized = str(action or "").strip().lower()
-        if normalized == "steal":
-            return (
-                list(self.steal_target_whitelist or []),
-                list(self.steal_target_blacklist or []),
-            )
-        elif normalized == "send":
-            return (
-                list(self.send_target_whitelist or []),
-                list(self.send_target_blacklist or []),
-            )
-        return [], []
-
-    def is_action_allowed(self, action: str, event: AstrMessageEvent) -> bool:
-        scope, target_id = self.get_event_target(event)
-        if not scope or not target_id:
-            return True
-        return self.is_target_allowed(action, f"{scope}:{target_id}")
-
-    def is_target_allowed(self, action: str, target_entry: str) -> bool:
-        normalized_target = self.normalize_target_entry(target_entry)
-        if not normalized_target:
-            return True
-
-        whitelist, blacklist = self._get_action_lists(action)
-        if whitelist:
-            return normalized_target in whitelist
-        if blacklist and normalized_target in blacklist:
-            return False
-        return True
-
-    def is_group_allowed(self, group_id: str) -> bool:
-        """检查群组是否允许。"""
-        if not group_id:
-            return True
-
-        return self.is_target_allowed("send", f"group:{group_id}")

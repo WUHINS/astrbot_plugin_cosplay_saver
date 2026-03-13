@@ -1,19 +1,21 @@
 import asyncio
 import os
-import random
 import tempfile
-import time
 from typing import Any
 
 import aiohttp
 
 from astrbot.api import logger
-from astrbot.api.event import AstrMessageEvent, MessageChain
-from astrbot.api.message_components import Image, Plain
+from astrbot.api.event import AstrMessageEvent
+from astrbot.api.message_components import Image
 
 
 class EventHandler:
     """事件处理服务类，负责处理所有与插件相关的事件操作。"""
+
+    # 类级别的 Session 管理器
+    _session: aiohttp.ClientSession | None = None
+    _session_lock: asyncio.Lock = asyncio.Lock()  # 异步锁，防止竞态条件
 
     def __init__(self, plugin_instance: Any):
         """初始化事件处理服务。
@@ -24,13 +26,21 @@ class EventHandler:
         self.plugin = plugin_instance
         self._cleaned = False  # 清理标志位
 
-        # 图片处理节流相关
-        self._last_process_time: float = (
-            0.0  # 上次处理时间（用于interval和cooldown模式）
-        )
+    @classmethod
+    async def _get_session(cls) -> aiohttp.ClientSession:
+        """获取或创建共享的 ClientSession（线程安全）。"""
+        # 使用异步锁防止多协程竞态条件
+        async with cls._session_lock:
+            if cls._session is None or cls._session.closed:
+                cls._session = aiohttp.ClientSession()
+            return cls._session
 
-        # 强制捕获窗口
-        self._force_capture_windows: dict[str, dict[str, object]] = {}
+    @classmethod
+    async def _close_session(cls):
+        """关闭共享的 ClientSession。"""
+        if cls._session and not cls._session.closed:
+            await cls._session.close()
+            cls._session = None
 
     def _normalize_str(self, value: object) -> str:
         """规范化字符串值。"""
@@ -52,295 +62,68 @@ class EventHandler:
             img: 图片组件
 
         Returns:
-            tuple[str | None, bool]: (临时文件路径, 是否为GIF动图)，失败返回 (None, False)
+            tuple[str | None, bool]: (临时文件路径，是否为 GIF 动图)，失败返回 (None, False)
         """
         url = self._normalize_str(getattr(img, "url", ""))
         if not url:
             return None, False
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                    if resp.status != 200:
-                        logger.warning(f"下载图片失败: HTTP {resp.status}")
-                        return None, False
+            session = await self._get_session()
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                if resp.status != 200:
+                    logger.warning(f"下载图片失败：HTTP {resp.status}")
+                    return None, False
 
-                    content_type = resp.headers.get("Content-Type", "").lower()
-                    content = await resp.read()
+                content_type = resp.headers.get("Content-Type", "").lower()
+                content = await resp.read()
 
-                    # 根据 Content-Type 确定扩展名和是否为 GIF
-                    is_gif = "gif" in content_type
-                    if is_gif:
+                # 根据 Content-Type 确定扩展名和是否为 GIF
+                is_gif = "gif" in content_type
+                if is_gif:
+                    ext = ".gif"
+                elif "png" in content_type:
+                    ext = ".png"
+                elif "webp" in content_type:
+                    ext = ".webp"
+                elif "jpeg" in content_type or "jpg" in content_type:
+                    ext = ".jpg"
+                else:
+                    # 尝试从文件头判断
+                    if content[:6] == b'GIF89a' or content[:6] == b'GIF87a':
                         ext = ".gif"
-                    elif "png" in content_type:
+                        is_gif = True
+                    elif content[:8] == b'\x89PNG\r\n\x1a\n':
                         ext = ".png"
-                    elif "webp" in content_type:
+                    elif content[:4] == b'RIFF' and content[8:12] == b'WEBP':
                         ext = ".webp"
-                    elif "jpeg" in content_type or "jpg" in content_type:
-                        ext = ".jpg"
                     else:
-                        # 尝试从文件头判断
-                        if content[:6] == b'GIF89a' or content[:6] == b'GIF87a':
-                            ext = ".gif"
-                            is_gif = True
-                        elif content[:8] == b'\x89PNG\r\n\x1a\n':
-                            ext = ".png"
-                        elif content[:4] == b'RIFF' and content[8:12] == b'WEBP':
-                            ext = ".webp"
-                        else:
-                            ext = ".jpg"
+                        ext = ".jpg"
 
-                    # 保存到临时文件
-                    temp_fd, temp_path = tempfile.mkstemp(suffix=ext)
-                    try:
-                        os.write(temp_fd, content)
-                        logger.debug(
-                            f"已下载原始图片: {temp_path} ({len(content)} bytes, "
-                            f"type={content_type}, is_gif={is_gif})"
-                        )
-                        return temp_path, is_gif
-                    finally:
-                        os.close(temp_fd)
+                # 保存到临时文件
+                temp_fd, temp_path = tempfile.mkstemp(suffix=ext)
+                try:
+                    os.write(temp_fd, content)
+                    logger.debug(
+                        f"已下载原始图片：{temp_path} ({len(content)} bytes, "
+                        f"type={content_type}, is_gif={is_gif})"
+                    )
+                    return temp_path, is_gif
+                finally:
+                    os.close(temp_fd)
 
         except asyncio.TimeoutError:
             logger.warning("下载图片超时")
             return None, False
         except Exception as e:
-            logger.warning(f"下载图片失败: {e}")
+            logger.warning(f"下载图片失败：{e}")
             return None, False
 
-    def _should_process_image(self) -> bool:
-        """根据偷图模式（概率/冷却）判断是否应该处理图片。
-
-        - probability 模式：每次收到图片按 steal_chance 概率决定
-        - cooldown 模式：两次偷取之间至少间隔 image_processing_cooldown 秒
-        """
-        steal_mode = self.plugin.steal_mode
-
-        if steal_mode == "cooldown":
-            return self._check_cooldown()
-        else:
-            return self._check_probability()
-
-    def _check_cooldown(self) -> bool:
-        """冷却模式：两次处理之间至少间隔 N 秒。"""
-        cooldown = self.plugin.image_processing_cooldown
-        try:
-            cooldown = int(cooldown)
-        except Exception:
-            cooldown = 10
-
-        current_time = time.time()
-        time_since_last = current_time - self._last_process_time
-
-        if time_since_last < cooldown:
-            logger.debug(
-                f"冷却检查：跳过（冷却={cooldown}秒，距上次={time_since_last:.1f}秒）"
-            )
-            return False
-
-        self._last_process_time = current_time
-        logger.debug(
-            f"冷却检查：通过（冷却={cooldown}秒，距上次={time_since_last:.1f}秒）"
-        )
-        return True
-
-    def _check_probability(self) -> bool:
-        """概率模式：每次按 steal_chance 概率决定是否偷取。"""
-        steal_chance = self.plugin.steal_chance
-        try:
-            steal_chance = float(steal_chance)
-        except Exception:
-            steal_chance = 0.6
-
-        if steal_chance <= 0:
-            logger.debug("偷图概率为0，跳过偷取")
-            return False
-        if steal_chance >= 1.0:
-            logger.debug("偷图概率为1.0，直接通过")
-            return True
-        if random.random() >= steal_chance:
-            logger.debug(f"概率检查：未通过（概率={steal_chance}）")
-            return False
-
-        logger.debug(f"概率检查：通过（概率={steal_chance}）")
-        return True
-
-    def _check_platform_emoji_metadata(
-        self,
-        img: Image,
-        event: AstrMessageEvent | None = None,
-        img_index: int | None = None,
-        image_segments: list[dict] | None = None,
-        image_file_map: dict[str, dict] | None = None,
-    ) -> bool:
-        """检查图片元信息，判断是否为平台标记的表情包。
-
-        支持的平台特征：
-        - NapCat/OneBot: subType=1 或 sub_type=1 表示表情包
-        - QQ: summary包含"表情"关键词
-
-        Args:
-            img: 图片组件
-            event: 消息事件对象（可选），用于访问原始消息数据
-
-        Returns:
-            bool: 是否为平台标记的表情包
-        """
-        try:
-
-            def is_emoji_summary(summary: object) -> bool:
-                s = self._normalize_str(summary)
-                if not s:
-                    return False
-                s_lower = s.lower()
-                return "表情" in s or "emoji" in s_lower or "sticker" in s_lower
-
-            def is_sub_type_emoji(sub_type: object) -> bool:
-                if sub_type is None:
-                    return False
-                if sub_type == 1 or sub_type == "1":
-                    return True
-                try:
-                    return int(sub_type) == 1
-                except Exception:
-                    return False
-
-            # 方式0: 从原始事件中查找 sub_type (最可靠的方法)
-            if (
-                image_segments is None
-                and event
-                and hasattr(event, "message_obj")
-                and hasattr(event.message_obj, "raw_message")
-            ):
-                raw_event = event.message_obj.raw_message
-                if hasattr(raw_event, "message") and isinstance(
-                    raw_event.message, list
-                ):
-                    image_segments = [
-                        seg
-                        for seg in raw_event.message
-                        if isinstance(seg, dict) and seg.get("type") == "image"
-                    ]
-
-            if image_segments:
-                matched_data: dict[str, object] | None = None
-
-                if (
-                    img_index is not None
-                    and 0 <= img_index < len(image_segments)
-                    and isinstance(image_segments[img_index], dict)
-                ):
-                    matched_data = image_segments[img_index].get("data", {}) or {}
-                else:
-                    img_file = self._normalize_str(getattr(img, "file", ""))
-                    img_url = self._normalize_str(getattr(img, "url", ""))
-                    img_file_unique = self._normalize_str(
-                        getattr(img, "file_unique", "")
-                    )
-
-                    if image_file_map and img_file:
-                        matched_data = image_file_map.get(img_file)
-                        if matched_data is None and img_file_unique:
-                            matched_data = image_file_map.get(img_file_unique)
-
-                    if matched_data is None:
-                        for seg in image_segments:
-                            if not isinstance(seg, dict):
-                                continue
-                            data = seg.get("data", {}) or {}
-                            if not isinstance(data, dict):
-                                continue
-                            seg_file = self._normalize_str(data.get("file", ""))
-                            seg_url = self._normalize_str(data.get("url", ""))
-
-                            if seg_file and (
-                                seg_file == img_file
-                                or (img_file_unique and seg_file == img_file_unique)
-                                or (img_url and seg_file in img_url)
-                                or (img_file and seg_file in img_file)
-                            ):
-                                matched_data = data
-                                break
-
-                            if seg_url and (
-                                (img_url and seg_url == img_url)
-                                or (img_file and seg_url in img_file)
-                            ):
-                                matched_data = data
-                                break
-
-                if matched_data is not None:
-                    sub_type = matched_data.get("sub_type")
-                    if is_sub_type_emoji(sub_type):
-                        logger.debug(
-                            f"检测到表情包标记: sub_type={sub_type} (从原始事件)"
-                        )
-                        return True
-
-                    summary = matched_data.get("summary", "")
-                    if is_emoji_summary(summary):
-                        logger.debug(
-                            f"检测到表情包标记: summary='{summary}' (从原始事件)"
-                        )
-                        return True
-
-            # 方式1: 检查 Image 对象的 subType 字段
-            if hasattr(img, "subType") and img.subType:
-                if is_sub_type_emoji(img.subType):
-                    logger.debug(f"检测到表情包标记: subType={img.subType}")
-                    return True
-
-            # 方式2: 检查 __dict__ 中的 sub_type
-            if hasattr(img, "__dict__"):
-                img_dict = img.__dict__
-                sub_type_underscore = img_dict.get("sub_type")
-                if is_sub_type_emoji(sub_type_underscore):
-                    logger.debug(
-                        f"检测到表情包标记: sub_type={sub_type_underscore} (从__dict__)"
-                    )
-                    return True
-
-            # 方式3: 通过 toDict() 检查
-            try:
-                raw_data = img.toDict()
-                if isinstance(raw_data, dict) and "data" in raw_data:
-                    data = raw_data["data"]
-
-                    sub_type = data.get("sub_type") or data.get("subType")
-                    if is_sub_type_emoji(sub_type):
-                        logger.debug(
-                            f"检测到表情包标记: sub_type={sub_type} (从toDict)"
-                        )
-                        return True
-
-                    summary = data.get("summary", "")
-                    if is_emoji_summary(summary):
-                        logger.debug(f"检测到表情包标记: summary='{summary}'")
-                        return True
-
-                    img_type = (
-                        data.get("type")
-                        or data.get("imageType")
-                        or data.get("image_type")
-                    )
-                    if img_type in ["emoji", "sticker", "face", "meme"]:
-                        logger.debug(f"检测到表情包标记: type='{img_type}'")
-                        return True
-            except Exception as e:
-                logger.debug(f"无法获取图片字典数据: {e}")
-
-            return False
-
-        except Exception as e:
-            logger.debug(f"检查平台表情包元信息失败: {e}")
-            return False
-
-    # 注意：这个方法不需要装饰器，因为在Main类中已经使用了装饰器
+    # 注意：这个方法不需要装饰器，因为在 Main 类中已经使用了装饰器
     # @event_message_type(EventMessageType.ALL)
     # @platform_adapter_type(PlatformAdapterType.ALL)
     async def on_message(self, event: AstrMessageEvent):
-        """消息监听：偷取消息中的图片并分类存储。"""
+        """消息监听：检测并保存女装图片。"""
         # 检查是否已清理
         if self._cleaned or self.plugin is None:
             return
@@ -348,7 +131,7 @@ class EventHandler:
         # 调试信息
         logger.debug(f"EventHandler.on_message called with event type: {type(event)}")
 
-        # 检查event对象是否正确
+        # 检查 event 对象是否正确
         if not hasattr(event, "get_messages"):
             logger.error(
                 f"Event object does not have get_messages method. Type: {type(event)}"
@@ -357,22 +140,16 @@ class EventHandler:
             return
 
         plugin_instance = self.plugin
-        force_entry = None
-        try:
-            force_entry = plugin_instance.get_force_capture_entry(event)
-        except Exception:
-            force_entry = None
 
-        force_active = force_entry is not None
-
-        try:
-            if not force_active and not plugin_instance.is_steal_enabled_for_event(event):
-                return
-        except Exception:
+        # 检查女装图片保存功能是否启用
+        if not getattr(plugin_instance, "plugin_config", None):
             return
 
-        if not plugin_instance.steal_emoji and not force_active:
+        if not getattr(plugin_instance.plugin_config, "save_cosplay_images", False):
+            logger.debug("女装图片保存功能未启用，跳过检测")
             return
+
+        logger.debug("女装图片保存功能已启用，开始检测图片")
 
         # 收集所有图片组件
         imgs: list[Image] = [
@@ -381,141 +158,66 @@ class EventHandler:
 
         # 如果没有图片，直接返回
         if not imgs:
+            logger.debug("消息中没有图片组件")
             return
 
-        if force_active:
-            img = imgs[0]
-            try:
-                # 尝试下载原始图片文件
-                temp_path: str | None
-                temp_path, is_gif = await self._download_original_image(img)
-                if temp_path and is_gif:
-                    logger.debug("强制捕获: 已下载原始 GIF 文件")
-
-                if not temp_path:
-                    temp_path = await img.convert_to_file_path()
-
-                if not os.path.exists(temp_path):
-                    await event.send(
-                        MessageChain([Plain(text="❌ 收录失败：图片临时文件不存在")])
-                    )
-                else:
-                    success, idx = await plugin_instance._process_image(
-                        event, temp_path, is_temp=True, is_platform_emoji=True
-                    )
-                    if success and idx:
-                        await plugin_instance._save_index(idx)
-                        await event.send(
-                            MessageChain([Plain(text="✅ 已收录并自动分类入库")])
-                        )
-                    else:
-                        await event.send(
-                            MessageChain(
-                                [
-                                    Plain(
-                                        text="❌ 未收录（可能被判定为非表情包/审核不通过/重复或处理失败）"
-                                    )
-                                ]
-                            )
-                        )
-            except Exception as e:
-                await event.send(MessageChain([Plain(text=f"❌ 收录失败：{e}")]))
-            finally:
-                try:
-                    plugin_instance.consume_force_capture(event)
-                except Exception:
-                    pass
-            return
-
-        # 检查是否应该处理图片（节流控制）
-        if not self._should_process_image():
-            logger.debug(f"跳过处理 {len(imgs)} 张图片（节流控制）")
-            return
-
-        logger.debug(f"开始处理 {len(imgs)} 张图片")
-
-        raw_image_segments: list[dict] = []
-        raw_image_file_map: dict[str, dict] = {}
-        try:
-            raw_event = getattr(
-                getattr(event, "message_obj", None), "raw_message", None
-            )
-            raw_message = getattr(raw_event, "message", None)
-            if isinstance(raw_message, list):
-                raw_image_segments = [
-                    seg
-                    for seg in raw_message
-                    if isinstance(seg, dict) and seg.get("type") == "image"
-                ]
-
-                for seg in raw_image_segments:
-                    data = seg.get("data", {}) or {}
-                    if not isinstance(data, dict):
-                        continue
-                    seg_file = self._normalize_str(data.get("file", ""))
-                    if seg_file and seg_file not in raw_image_file_map:
-                        raw_image_file_map[seg_file] = data
-        except Exception:
-            raw_image_segments = []
-            raw_image_file_map = {}
-
+        # 处理每张图片
         for i, img in enumerate(imgs):
             try:
-                # 检查图片元信息，只处理平台标记的表情包
-                is_platform_emoji = self._check_platform_emoji_metadata(
-                    img,
-                    event,
-                    img_index=i,
-                    image_segments=raw_image_segments,
-                    image_file_map=raw_image_file_map,
-                )
+                logger.debug(f"开始检测第 {i+1}/{len(imgs)} 张图片")
 
-                if not is_platform_emoji:
-                    # 获取 subType 值用于调试日志
-                    sub_type_value = getattr(img, "subType", "unknown")
-                    logger.debug(f"跳过非表情包图片 (subType={sub_type_value})")
+                # 下载图片用于检测
+                temp_path_for_detect, is_gif = await self._download_original_image(img)
+                
+                # 如果下载失败，尝试使用 convert_to_file_path
+                if not temp_path_for_detect:
+                    temp_path_for_detect = await img.convert_to_file_path()
+                    # 重新检测是否为 GIF（因为 download 失败时 is_gif 可能不准确）
+                    if temp_path_for_detect and os.path.exists(temp_path_for_detect):
+                        is_gif = temp_path_for_detect.lower().endswith(".gif")
+
+                if not temp_path_for_detect or not os.path.exists(temp_path_for_detect):
+                    logger.warning("女装检测：图片文件不存在")
                     continue
 
-                logger.info("检测到平台标记的表情包，开始处理")
+                # 检查是否忽略 GIF（在下载后检查，确保准确）
+                if getattr(plugin_instance.plugin_config, "ignore_gif", False):
+                    if is_gif or temp_path_for_detect.lower().endswith(".gif"):
+                        logger.debug(f"已忽略 GIF 图片：{temp_path_for_detect}")
+                        await self._safe_remove_file(temp_path_for_detect)
+                        continue
 
-                # 尝试下载原始图片文件
-                temp_path: str | None
-                temp_path, is_gif = await self._download_original_image(img)
-                if temp_path and is_gif:
-                    logger.debug(f"已下载原始 GIF: {temp_path}")
-
-                # 如果下载失败，使用框架提供的路径
-                if not temp_path:
-                    temp_path = await img.convert_to_file_path()
-
-                # 临时文件由框架创建，无需安全检查
-                # 安全检查会在 process_image 中处理最终存储路径时进行
-
-                # 确保临时文件存在且可访问
-                if not os.path.exists(temp_path):
-                    logger.warning(f"临时文件不存在: {temp_path}")
-                    continue
-
-                # 使用统一的图片处理方法
-                # 传递平台元信息标记，用于优化处理流程
-                success, idx = await plugin_instance._process_image(
-                    event, temp_path, is_temp=True, is_platform_emoji=is_platform_emoji
+                # 使用 ImageProcessorService 检测女装图片
+                is_cosplay, reason = await plugin_instance.image_processor_service.detect_cosplay_image(
+                    event, temp_path_for_detect
                 )
-                if success and idx:
-                    await plugin_instance._save_index(idx)
+
+                if is_cosplay:
+                    logger.info(f"检测到女装图片：{reason}")
+                    # 保存女装图片到对应目录
+                    success, save_path = await plugin_instance.image_processor_service.save_cosplay_image(
+                        event, temp_path_for_detect, is_temp=True
+                    )
+                    if success:
+                        logger.info(f"女装图片已保存：{save_path}")
+                    else:
+                        logger.warning(f"女装图片保存失败：{save_path}")
+                else:
+                    logger.debug(f"非女装图片：{reason}")
+
             except FileNotFoundError as e:
-                logger.error(f"图片文件不存在: {e}")
+                logger.error(f"图片文件不存在：{e}")
             except PermissionError as e:
-                logger.error(f"图片文件权限错误: {e}")
+                logger.error(f"图片文件权限错误：{e}")
             except asyncio.TimeoutError as e:
-                logger.error(f"图片处理超时: {e}")
+                logger.error(f"图片处理超时：{e}")
             except ValueError as e:
-                logger.error(f"图片处理参数错误: {e}")
+                logger.error(f"图片处理参数错误：{e}")
             except Exception as e:
-                logger.error(f"处理图片失败: {e}", exc_info=True)
+                logger.error(f"处理图片失败：{e}", exc_info=True)
 
     async def _clean_raw_directory(self) -> int:
-        """清理raw目录中的所有原始图片文件。"""
+        """清理 raw 目录中的所有原始图片文件。"""
         # 检查是否已清理
         if self._cleaned or self.plugin is None:
             return 0
@@ -523,18 +225,18 @@ class EventHandler:
         try:
             total_deleted = 0
 
-            # 清理raw目录中的所有文件
+            # 清理 raw 目录中的所有文件
             if self.plugin.base_dir:
                 raw_dir = self.plugin.base_dir / "raw"
                 if raw_dir.exists():
-                    logger.debug(f"开始清理raw目录: {raw_dir}")
+                    logger.debug(f"开始清理 raw 目录：{raw_dir}")
 
-                    # 获取raw目录中的所有文件
+                    # 获取 raw 目录中的所有文件
                     files = list(raw_dir.iterdir())
                     if not files:
-                        logger.debug(f"raw目录已为空: {raw_dir}")
+                        logger.debug(f"raw 目录已空：{raw_dir}")
                     else:
-                        # 清理所有文件（因为成功分类的文件已经被立即删除了）
+                        # 清理所有文件
                         deleted_count = 0
                         for file_path in files:
                             try:
@@ -543,299 +245,48 @@ class EventHandler:
                                         str(file_path)
                                     ):
                                         deleted_count += 1
-                                        logger.debug(f"已删除raw文件: {file_path}")
+                                        logger.debug(f"已删除 raw 文件：{file_path}")
                                     else:
-                                        logger.error(f"删除raw文件失败: {file_path}")
+                                        logger.error(f"删除 raw 文件失败：{file_path}")
                             except Exception as e:
-                                logger.error(
-                                    f"处理raw文件时发生错误: {file_path}, 错误: {e}"
-                                )
+                                logger.error(f"删除 raw 文件失败：{file_path}, 错误：{e}")
 
-                        if deleted_count > 0:
-                            logger.info(
-                                f"清理raw目录完成，共删除 {deleted_count} 个文件"
-                            )
                         total_deleted += deleted_count
-                else:
-                    logger.debug(f"raw目录不存在: {raw_dir}")
-            else:
-                logger.warning("插件base_dir未设置，无法清理raw目录")
+                        logger.info(f"已清理 raw 目录，删除 {deleted_count} 个文件")
 
-            if total_deleted > 0:
-                logger.info(f"清理完成，总计删除 {total_deleted} 个文件")
             return total_deleted
+
         except Exception as e:
-            logger.error(f"清理目录时发生错误: {e}", exc_info=True)
+            logger.error(f"清理 raw 目录失败：{e}")
             return 0
 
-    async def _enforce_capacity(self, image_index: dict):
-        """执行容量控制，删除最旧的图片。"""
-        # 检查是否已清理
-        if self._cleaned or self.plugin is None:
-            return
-
+    async def _safe_remove_file(self, file_path: str) -> bool:
+        """安全删除文件。
+        
+        Args:
+            file_path: 文件路径
+            
+        Returns:
+            bool: 是否删除成功
+        """
         try:
-            items_to_remove = self._select_items_for_removal(image_index)
-            if not items_to_remove:
-                return
-
-            logger.info(
-                f"容量控制: 当前 {len(image_index) + len(items_to_remove)} 个，"
-                f"上限 {int(self.plugin.max_reg_num)}，将删除 {len(items_to_remove)} 个最旧的"
-            )
-
-            for remove_path, _ in items_to_remove:
-                try:
-                    if os.path.exists(remove_path):
-                        await self.plugin._safe_remove_file(remove_path)
-
-                    if remove_path in image_index and isinstance(
-                        image_index[remove_path], dict
-                    ):
-                        category = image_index[remove_path].get("category", "")
-                        if category and self.plugin.base_dir:
-                            file_name = os.path.basename(remove_path)
-                            category_file_path = os.path.join(
-                                self.plugin.base_dir, "categories", category, file_name
-                            )
-                            if os.path.exists(category_file_path):
-                                await self.plugin._safe_remove_file(category_file_path)
-                except (FileNotFoundError, PermissionError) as e:
-                    logger.error(f"删除文件时文件操作错误: {remove_path}, 错误: {e}")
-                except OSError as e:
-                    logger.error(f"删除文件时系统错误: {remove_path}, 错误: {e}")
-                except Exception as e:
-                    logger.error(
-                        f"删除文件时发生未预期错误: {remove_path}, 错误: {e}",
-                        exc_info=True,
-                    )
-
-                if remove_path in image_index:
-                    del image_index[remove_path]
-
-            logger.info(
-                f"容量控制完成，删除了 {len(items_to_remove)} 个表情包，当前数量: {len(image_index)}"
-            )
-        except ValueError as e:
-            logger.error(f"执行容量控制时配置值错误: {e}")
-        except (FileNotFoundError, PermissionError) as e:
-            logger.error(f"执行容量控制时文件操作错误: {e}")
-        except OSError as e:
-            logger.error(f"执行容量控制时系统错误: {e}")
+            if file_path and os.path.exists(file_path):
+                os.remove(file_path)
+                logger.debug(f"已删除文件：{file_path}")
+                return True
+            return False
         except Exception as e:
-            logger.error(f"执行容量控制时发生未预期错误: {e}", exc_info=True)
+            logger.error(f"删除文件失败 {file_path}: {e}")
+            return False
 
-    def _select_items_for_removal(self, image_index: dict) -> list[tuple[str, int]]:
-        """从索引中选出需要移除的条目（按创建时间从旧到新排序后取最旧的）。
-
-        Returns:
-            需要移除的 (file_path, created_at) 列表；若无需移除则返回空列表。
-        """
-        try:
-            max_reg = int(self.plugin.max_reg_num)
-        except (TypeError, ValueError):
-            max_reg = 500  # 默认值
-
-        if max_reg <= 0:
-            logger.warning(f"容量控制上限无效: max_reg_num={max_reg}，跳过")
-            return []
-
-        if len(image_index) <= max_reg:
-            return []
-
-        image_items: list[tuple[str, int]] = []
-        for file_path, image_info in image_index.items():
-            created_at = (
-                int(image_info.get("created_at", 0))
-                if isinstance(image_info, dict)
-                else 0
-            )
-            image_items.append((file_path, created_at))
-
-        if not image_items:
-            return []
-
-        image_items.sort(key=lambda x: x[1])
-        remove_count = min(len(image_items) - max_reg, len(image_items))
-        return image_items[:remove_count]
-
-    def _enforce_capacity_sync(self, image_index: dict) -> list[str]:
-        """同步版本的容量控制，删除索引条目并返回需要删除的文件路径。
-
-        Args:
-            image_index: 索引字典
-
-        Returns:
-            list[str]: 需要删除的文件路径列表
-        """
-        files_to_delete = []
-
-        try:
-            items_to_remove = self._select_items_for_removal(image_index)
-            if not items_to_remove:
-                return files_to_delete
-
-            logger.info(f"[容量控制-索引] 将删除 {len(items_to_remove)} 个最旧条目")
-
-            for remove_path, _ in items_to_remove:
-                if remove_path in image_index:
-                    files_to_delete.append(remove_path)
-
-                    if isinstance(image_index[remove_path], dict):
-                        category = image_index[remove_path].get("category", "")
-                        if category and self.plugin.base_dir:
-                            file_name = os.path.basename(remove_path)
-                            category_file_path = os.path.join(
-                                self.plugin.base_dir, "categories", category, file_name
-                            )
-                            files_to_delete.append(category_file_path)
-
-                    del image_index[remove_path]
-
-        except Exception as e:
-            logger.error(f"同步容量控制失败: {e}")
-
-        return files_to_delete
-
-    def _get_force_capture_key(self, event) -> str:
-        """获取强制捕获的唯一键。
-
-        Args:
-            event: 消息事件对象
-
-        Returns:
-            str: 唯一键
-        """
-        if hasattr(event, "get_session_id"):
-            try:
-                session_id = event.get_session_id()
-                if session_id:
-                    return str(session_id)
-            except Exception:
-                pass
-
-        if hasattr(event, "unified_msg_origin"):
-            try:
-                return str(event.unified_msg_origin)
-            except Exception:
-                pass
-
-        return "global"
-
-    def _cleanup_expired_capture_windows(self) -> int:
-        """清理所有过期的强制捕获窗口。
-
-        Returns:
-            int: 清理的过期窗口数量
-        """
-        now = time.time()
-        expired_keys = [
-            key
-            for key, entry in self._force_capture_windows.items()
-            if isinstance(entry, dict) and float(entry.get("until", 0)) < now
-        ]
-        for key in expired_keys:
-            self._force_capture_windows.pop(key, None)
-        return len(expired_keys)
-
-    def _get_force_capture_sender_id(self, event) -> str | None:
-        """获取发送者ID。
-
-        Args:
-            event: 消息事件对象
-
-        Returns:
-            str | None: 发送者ID
-        """
-        # 优先使用框架官方 API
-        if hasattr(event, "get_sender_id"):
-            try:
-                sid = event.get_sender_id()
-                if sid:
-                    return str(sid)
-            except Exception:
-                pass
-
-        # 兜底：防御性遍历属性
-        for attr in ("sender_id", "user_id"):
-            value = getattr(event, attr, None)
-            if value:
-                return str(value)
-
-        message_obj = getattr(event, "message_obj", None)
-        if message_obj is not None:
-            sender = getattr(message_obj, "sender", None)
-            if sender is not None:
-                uid = getattr(sender, "user_id", None)
-                if uid:
-                    return str(uid)
-
-        return None
-
-    def begin_force_capture(self, event, seconds: int) -> None:
-        """开始强制捕获窗口。
-
-        Args:
-            event: 消息事件对象
-            seconds: 捕获窗口持续时间（秒）
-        """
-        key = self._get_force_capture_key(event)
-        sender_id = self._get_force_capture_sender_id(event)
-        until = time.time() + max(1, int(seconds))
-        self._force_capture_windows[key] = {"until": until, "sender_id": sender_id}
-
-    def get_force_capture_entry(self, event) -> dict[str, object] | None:
-        """获取强制捕获条目。
-
-        Args:
-            event: 消息事件对象
-
-        Returns:
-            dict | None: 捕获条目，如果不存在或已过期则返回None
-        """
-        # 先清理所有过期的捕获窗口
-        self._cleanup_expired_capture_windows()
-
-        key = self._get_force_capture_key(event)
-        entry = self._force_capture_windows.get(key)
-        if not entry:
-            return None
-
-        try:
-            until = float(entry.get("until", 0))
-        except Exception:
-            self._force_capture_windows.pop(key, None)
-            return None
-
-        if time.time() > until:
-            self._force_capture_windows.pop(key, None)
-            return None
-
-        expected_sender_id = entry.get("sender_id")
-        if expected_sender_id:
-            current_sender_id = self._get_force_capture_sender_id(event)
-            if current_sender_id and str(current_sender_id) != str(expected_sender_id):
-                return None
-
-        return entry
-
-    def consume_force_capture(self, event) -> None:
-        """消费强制捕获条目。
-
-        Args:
-            event: 消息事件对象
-        """
-        key = self._get_force_capture_key(event)
-        self._force_capture_windows.pop(key, None)
-
-    def cleanup(self):
+    async def cleanup(self):
         """清理资源。"""
         if self._cleaned:
             return
+
         self._cleaned = True
-        # 清理强制捕获窗口
-        if hasattr(self, "_force_capture_windows"):
-            self._force_capture_windows.clear()
-        # 清理插件引用
-        self.plugin = None
+        
+        # 关闭共享的 Session
+        await self._close_session()
+        
         logger.debug("EventHandler 资源已清理")

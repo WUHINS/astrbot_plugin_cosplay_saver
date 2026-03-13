@@ -1,196 +1,388 @@
-# 🌟 表情包小偷
+# 🌟 女装图片保存助手
 
-<div align="center">
+> **项目来源**：基于 [astrbot_plugin_stealer](https://github.com/nagatoquin33/astrbot_plugin_stealer) 重构
+> 
+> AstrBot 插件 - 自动识别并保存群友的女装图片，支持 SMTP 邮件推送每日统计日报
 
-<img src="https://count.getloli.com/@nagatoquin33?name=nagatoquin33&theme=rule34&padding=7&offset=0&align=top&scale=1&pixelated=1&darkmode=auto" alt="Moe Counter">
+[![AstrBot](https://img.shields.io/badge/AstrBot-Plugin-blue)](https://github.com/Soulter/AstrBot)
+[![Python](https://img.shields.io/badge/Python-3.10+-green.svg)](https://www.python.org/)
+[![Version](https://img.shields.io/badge/version-1.1.0-orange.svg)](https://github.com/WUHINS/astrbot_plugin_cosplay_saver)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**让 Bot 自动偷走群友的表情包，分类入库，聊天时看心情自动甩出来。**
+自动识别并保存群友的女装图片到对应目录。使用视觉模型（VLM）进行 AI 识别，支持宽松判断策略，确保不漏掉任何女装图片。图片按"群号/群员 QQ 号_QQ 名"的目录结构自动组织，支持 SMTP 邮件推送每日统计日报。
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-![Python Version](https://img.shields.io/badge/Python-3.10%2B-blue)
-![AstrBot](https://img.shields.io/badge/AstrBot-%E2%89%A54.10.4-green)
-![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)
-[![Last Commit](https://img.shields.io/github/last-commit/nagatoquin33/astrbot_plugin_stealer)](https://github.com/nagatoquin33/astrbot_plugin_stealer/commits/master)
-
-</div>
+**注意**：本插件移除了原项目的表情包偷取和自动发送功能，专注于女装图片识别与保存。
 
 ---
 
-## 📢 简介
+## ✨ 功能特性
 
-灵感来自 maibot 的表情包偷取和 meme_manager 的标签注入思路。全人机代码，本人全程监工调试。
+### 🎯 核心功能
+- **AI 智能识别** - 使用视觉语言模型（VLM）自动识别女装图片
+- **宽松判断策略** - 宁可误判不漏判，确保捕获所有女装图片
+- **自动分类保存** - 按"群号/群员 QQ 号_QQ 名"目录结构自动组织
+- **多格式支持** - 支持 JPG、PNG、GIF、WebP 等常见图片格式
 
-表情包小偷是一款基于多模态 AI 的 [AstrBot](https://github.com/Soulter/AstrBot) 娱乐插件——自动偷取聊天中的表情包，利用视觉模型进行情绪分类，对话时按概率发送一张情绪匹配的表情包，让 Bot 的回复更有人味。偷够了可以随时金盆洗手，偷取和自动发送可独立开关。
+### 🎬 高级功能
+- **GIF 动图处理** - 自动提取 GIF 关键帧进行识别
+- **忽略 GIF 选项** - 可配置跳过所有 GIF 图片
+- **SMTP 邮件推送** - 每日定时发送统计日报到邮箱
+- **多模型支持** - 支持配置专用识别模型
 
-本插件完全开源免费，欢迎 Issue 和 PR。
+### ⚡ 性能优化
+- **异步处理** - 所有 IO 操作使用异步方式，不阻塞主事件循环
+- **智能缓存** - 图片识别结果缓存，避免重复识别
+- **资源管理** - 自动清理临时文件，完善的异常处理
 
-## ✨ 核心功能
+---
 
-| 功能 | 说明 |
-|:---|:---|
-| **自动偷图** | 监听群聊图片，按概率或冷却模式自动收集，支持内容审核过滤 |
-| **智能分类** | 利用 VLM 识别图片内容与情绪（happy、sad、angry 等 17+ 种预设分类） |
-| **情感共鸣** | 分析 Bot 回复的情绪，自动追加一张匹配的表情包 |
-| **LLM 主动选图** | 对话中 LLM 可通过工具调用搜索并发送最合适的表情包 |
-| **双模式情绪分析** | LLM 模式（后置轻量模型分析，不改回复）/ 被动标签模式（LLM 直接标注情绪） |
-| **WebUI 管理** | 可视化查看、搜索、删除、拉黑表情包，支持分类管理 |
-| **群聊过滤** | 黑白名单控制哪些群启用偷取/发送 |
+## 📦 快速开始
 
-## 🚀 快速开始
+### 安装方式
 
-### 1. 安装
+#### 方式一：通过 AstrBot 插件市场（推荐）
 
-在 AstrBot 插件管理中搜索并安装 `astrbot_plugin_stealer`。
+在 AstrBot 插件管理中搜索并安装 `astrbot_plugin_cosplay_saver`。
 
-### 2. 前置条件
+#### 方式二：手动安装
 
-**必须配置视觉模型**——插件依赖 VLM 对图片进行分类。可以在 AstrBot 中配置全局图片描述模型，也可以在插件配置中指定 `vision_provider_id`。
+```bash
+# 1. 克隆或下载插件到 AstrBot 的 data/plugins 目录
+cd /path/to/AstrBot/data/plugins
+git clone https://github.com/nagatoquin33/astrbot_plugin_cosplay_saver.git
 
-### 3. 开始使用
+# 2. 安装依赖
+pip install -r astrbot_plugin_cosplay_saver/requirements.txt
 
+# 3. 在 AstrBot 管理界面启用插件
 ```
-/meme on        # 开启偷图
-/meme auto_on   # 开启自动发送
-```
 
-偷够了？
+### 依赖要求
 
-```
-/meme off       # 关闭偷图（已收集的表情包仍可使用）
-```
+- Python 3.10+
+- AstrBot 4.10.4+
+- Pillow >= 10.0.0
+- numpy >= 1.24.0
 
-### 4. WebUI 管理
-
-启动后访问 `http://<你的IP>:8899/`，默认启用登录验证，密码在插件配置中查看（首次自动生成 6 位随机密码）。
+---
 
 ## ⚙️ 配置说明
 
-所有配置项均可在 AstrBot 管理面板中修改，无需手动编辑文件。
+### 基础配置
 
-### 偷图设置
+```json
+{
+  "save_cosplay_images": true,
+  "cosplay_detection_threshold": 0.6,
+  "cosplay_vision_provider_id": "",
+  "vision_provider_id": "",
+  "ignore_gif": false,
+  "smtp": {
+    "enabled": false,
+    "smtp_server": "smtp.qq.com",
+    "smtp_port": 587,
+    "sender_email": "",
+    "sender_password": "",
+    "receiver_email": "",
+    "use_tls": true,
+    "send_time": "08:00"
+  }
+}
+```
 
-| 配置项 | 默认值 | 说明 |
-|:---|:---|:---|
-| `steal_emoji` | `true` | 总开关 |
-| `steal_mode` | `probability` | `probability` 概率模式 / `cooldown` 冷却模式 |
-| `steal_chance` | `0.6` | 概率模式下每次偷取的概率 |
-| `image_processing_cooldown` | `10` | 冷却模式下两次偷取的最小间隔（秒） |
-| `content_filtration` | `false` | 内容审核，开启后过滤不当图片 |
+### 配置项详解
 
-### 发送设置
+#### 女装图片识别
 
-| 配置项 | 默认值 | 说明 |
-|:---|:---|:---|
-| `auto_send` | `true` | 自动随聊发送表情包 |
-| `emoji_chance` | `0.4` | 自动发送的概率（0.0 ~ 1.0） |
-| `send_emoji_as_gif` | `true` | 以 GIF 格式发送（更像真表情包，但高频场景内存占用略高） |
-| `smart_emoji_selection` | `true` | 智能评分选择；关闭则随机选取 |
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `save_cosplay_images` | bool | `true` | 是否开启女装图片保存 |
+| `cosplay_detection_threshold` | float | `0.6` | 识别阈值（0.3-0.9，越低越宽松） |
+| `cosplay_vision_provider_id` | string | `""` | 女装识别专用模型（留空使用默认） |
+| `vision_provider_id` | string | `""` | 视觉模型（留空使用全局默认） |
+| `ignore_gif` | bool | `false` | 是否忽略 GIF 图片 |
 
-### 情绪识别
+#### SMTP 邮件推送
 
-| 配置项 | 默认值 | 说明 |
-|:---|:---|:---|
-| `enable_natural_emotion_analysis` | `true` | `true` = LLM 模式（推荐） / `false` = 被动标签模式 |
-| `emotion_analysis_provider_id` | `""` | LLM 模式使用的轻量模型，留空用默认模型 |
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `enabled` | bool | `false` | 是否启用邮件推送 |
+| `smtp_server` | string | `""` | SMTP 服务器地址 |
+| `smtp_port` | int | `587` | SMTP 端口 |
+| `sender_email` | string | `""` | 发件人邮箱 |
+| `sender_password` | string | `""` | 邮箱授权码 |
+| `receiver_email` | string | `""` | 收件人邮箱 |
+| `use_tls` | bool | `true` | 是否使用 TLS 加密 |
+| `send_time` | string | `"08:00"` | 每日发送时间（24 小时制） |
 
-### 模型配置
+---
 
-| 配置项 | 默认值 | 说明 |
-|:---|:---|:---|
-| `vision_provider_id` | `""` | 视觉模型，留空自动使用 AstrBot 全局图片描述模型 |
+## 📧 SMTP 邮件推送配置
 
-### 群聊过滤
+### 配置步骤
 
-| 配置项 | 默认值 | 说明 |
-|:---|:---|:---|
-| `send_target_whitelist` | `[]` | 发表情白名单。使用 `group:群号` 或 `user:QQ号` |
-| `send_target_blacklist` | `[]` | 发表情黑名单。白名单为空时生效 |
-| `steal_target_whitelist` | `[]` | 偷表情白名单。使用 `group:群号` 或 `user:QQ号` |
-| `steal_target_blacklist` | `[]` | 偷表情黑名单。白名单为空时生效 |
+#### 1. 获取邮箱授权码
 
-### 存储管理
+**QQ 邮箱示例**：
+1. 登录 QQ 邮箱网页版（mail.qq.com）
+2. 进入"设置" → "账户"
+3. 开启 "POP3/SMTP 服务"
+4. 点击"生成授权码"
+5. 获取授权码（不是登录密码！）
 
-| 配置项 | 默认值 | 说明 |
-|:---|:---|:---|
-| `max_reg_num` | `100` | 表情包存储上限，超出自动清理最旧的 |
+**其他邮箱**：
+- 163 邮箱：设置 → POP3/SMTP/IMAP
+- Gmail：设置 → 转发和 POP/IMAP → 启用 IMAP
+- Outlook：设置 → 邮件 → 同步电子邮件
 
-### WebUI
+#### 2. 配置 SMTP 参数
 
-| 配置项 | 默认值 | 说明 |
-|:---|:---|:---|
-| `webui.enabled` | `true` | 是否启用 WebUI |
-| `webui.host` | `0.0.0.0` | 监听地址 |
-| `webui.port` | `8899` | 监听端口 |
-| `webui.auth_enabled` | `true` | 启用登录验证 |
-| `webui.password` | `""` | 访问密码，留空自动生成 |
-| `webui.session_timeout` | `3600` | 登录会话超时（秒） |
+```json
+{
+  "smtp": {
+    "enabled": true,
+    "smtp_server": "smtp.qq.com",
+    "smtp_port": 587,
+    "sender_email": "your_email@qq.com",
+    "sender_password": "your_auth_code",
+    "receiver_email": "receiver@qq.com",
+    "use_tls": true,
+    "send_time": "08:00"
+  }
+}
+```
 
-## 🔄 情绪分析模式详解
+#### 3. 常用邮箱 SMTP 配置
 
-| | LLM 模式（默认） | 被动标签模式 |
-|:---|:---|:---|
-| **原理** | Bot 回复后，后台用轻量模型分析语义情绪 | 注入提示词让 LLM 在回复开头插入 `&&emotion&&` 标签 |
-| **对回复的影响** | ✅ 不修改 LLM 回复 | ❌ 会在回复中插入标签（插件自动清理） |
-| **适用场景** | 日常使用，保持对话自然 | 需要精确控制情绪分类 |
+| 邮箱服务商 | SMTP 服务器 | 端口 | 加密方式 |
+|-----------|------------|------|---------|
+| **QQ 邮箱** | smtp.qq.com | 587/465 | TLS |
+| **163 邮箱** | smtp.163.com | 587/465 | TLS |
+| **126 邮箱** | smtp.126.com | 587/465 | TLS |
+| **Gmail** | smtp.gmail.com | 587 | TLS |
+| **Outlook** | smtp-mail.outlook.com | 587 | TLS |
+| **新浪邮箱** | smtp.sina.com | 587 | TLS |
 
-> ⚠️ **切换模式后务必执行 `/reset` 清除对话上下文**，否则 LLM 可能延续旧模式的输出习惯。
+#### 4. 测试发送
 
-## 🎮 指令列表
+配置完成后，重启插件，系统会自动验证配置。如需测试，可等待次日自动发送或手动触发（待实现命令功能）。
 
-所有指令以 `/meme` 为前缀。
+### 日报内容示例
 
-### 基础指令（所有人可用）
+**邮件主题**：🌟 女装图片统计日报 - 2026-03-13
 
-| 指令 | 说明 |
-|:---|:---|
-| `on` / `off` | 开启 / 关闭表情包收集 |
-| `auto_on` / `auto_off` | 开启 / 关闭自动发送 |
-| `status` | 查看运行状态和表情包统计 |
-| `list [分类] [数量]` | 列出已收集的表情包 |
-| `emotion_stats` | 查看情绪分析统计和当前模式 |
-| `clean [force]` | 清理未分类的原始缓存 |
+**邮件内容**：
+- 📊 **总体统计**
+  - 保存图片总数：156 张
+  - 活跃群组数：8 个
+  - 活跃用户数：45 人
 
-### 管理指令（仅管理员）
+- 📈 **群组详情**
+  - 群号、活跃用户数、保存图片数、用户列表
 
-| 指令 | 说明 |
-|:---|:---|
-| `偷` | 进入 30 秒强制收录模式，期间发送的图片直接入库 |
-| `group show` | 查看当前偷表情/发表情名单 |
-| `group <send\|steal> <wl\|bl> <add\|del\|clear> [group:群号\|user:QQ号]` | 管理目标黑白名单 |
-| `delete <序号\|文件名>` | 删除指定表情包 |
-| `capacity` | 立即执行容量控制 |
-| `rebuild_index` | 重建索引（版本迁移或索引异常时使用） |
-| `natural_analysis <on\|off>` | 切换情绪识别模式 |
-| `clear_emotion_cache` | 清空情绪分析缓存 |
+- 📅 **统计信息**
+  - 统计日期、报告生成时间
 
-### LLM 工具调用（对话中自动触发）
+---
 
-| 工具 | 说明 |
-|:---|:---|
-| `search_emoji` | LLM 搜索匹配的表情包候选列表 |
-| `send_emoji_by_id` | LLM 从候选列表中选择并发送表情包 |
+## 🎯 使用说明
+
+### 自动保存
+
+插件会自动监听所有群聊消息中的图片，检测到女装图片后自动保存到：
+
+```
+数据目录/cosplay/群号/群员 QQ 号_QQ 名/时间戳_图片名.jpg
+```
+
+### 目录结构
+
+```
+data/
+└── astrbot_plugin_cosplay_saver/
+    └── cosplay/
+        ├── 12345678/
+        │   ├── 111111_小明/
+        │   │   ├── 20260313_120000_image1.jpg
+        │   │   └── 20260313_150000_image2.png
+        │   └── 222222_小红/
+        │       └── 20260313_180000_image3.jpg
+        └── 87654321/
+            └── 333333_小美/
+                └── 20260313_200000_image4.gif
+```
+
+### 识别阈值调整
+
+**推荐配置**：
+
+| 场景 | 阈值 | 说明 |
+|------|------|------|
+| **宽松模式** | 0.5-0.6 | 推荐，平衡误判和漏判 |
+| **非常宽松** | 0.3-0.5 | 几乎不会漏掉，但可能误判 |
+| **严格模式** | 0.7-0.9 | 只保存明显的女装图片 |
+
+### GIF 处理
+
+- **ignore_gif = false**（默认）：正常处理 GIF 图片，提取关键帧识别
+- **ignore_gif = true**：跳过所有 GIF 图片，不检测不保存
+
+**建议**：
+- 如果群聊中 GIF 很多且不想保存 → 开启 `ignore_gif`
+- 如果想保存所有女装图片 → 关闭 `ignore_gif`
+
+---
+
+## 🔍 工作原理
+
+```
+消息监听
+    ↓
+检查图片（跳过 GIF 如果启用）
+    ↓
+下载原图
+    ↓
+AI 识别（VLM 模型）
+    ↓
+结果解析（宽松判断）
+    ↓
+保存文件（群号/用户/图片）
+    ↓
+缓存结果（避免重复）
+    ↓
+定时统计（每日）
+    ↓
+SMTP 推送（邮件日报）
+```
+
+---
+
+## 🛡️ 隐私与安全
+
+- ✅ **本地存储**：所有图片存储在本地，不会上传到任何服务器
+- ✅ **权限控制**：支持删除功能，可随时清理不需要的图片
+- ✅ **自动清理**：自动清理临时文件，避免磁盘占用
+- ✅ **异常处理**：完善的异常处理和日志记录
+- ✅ **加密传输**：SMTP 支持 TLS 加密，保护邮箱凭证
+
+---
 
 ## ⚠️ 注意事项
 
-- **WebUI 删除分类**会同时删除该分类下所有图片，且无法恢复，操作前请确认。
-- 开启 `send_emoji_as_gif` 时，大分辨率图片或高帧动图的 GIF 转换会产生瞬时内存峰值，低内存环境建议关闭。
-- 插件依赖视觉模型（VLM）进行分类，未配置视觉模型时偷图功能无法正常工作。
+### 模型费用
+- 使用付费模型（如 GPT-4o、Claude）会产生费用
+- 建议使用轻量免费模型或设置识别冷却时间
+- GIF 动图会提取多帧识别，增加费用
+
+### 存储管理
+- 图片会持续累积，建议定期清理
+- 可设置磁盘空间监控
+- 重要图片建议备份
+
+### 隐私保护
+- 请确保在合适的群聊中使用
+- 尊重他人隐私，不要滥用
+- 遵守相关法律法规
+
+### 性能优化
+- 大量图片时建议开启 `ignore_gif`
+- 可调整识别阈值减少误判
+- 设置合理的模型调用频率
+
+---
+
+## 📊 插件结构
+
+```
+astrbot_plugin_cosplay_saver/
+├── core/
+│   ├── config.py                  # 配置管理（Pydantic）
+│   ├── event_handler.py           # 事件处理（消息监听）
+│   ├── image_processor_service.py # 图片处理（AI 识别）
+│   ├── smtp_service.py            # SMTP 邮件服务
+│   ├── daily_report_service.py    # 日报生成服务
+│   └── task_scheduler.py          # 定时任务调度器
+├── main.py                        # 插件入口
+├── _conf_schema.json             # 配置 Schema
+├── requirements.txt              # Python 依赖
+├── metadata.yaml                 # 插件元数据
+├── README.md                     # 文档
+└── LICENSE                       # 许可证
+```
+
+---
+
+## 🐛 问题反馈
+
+遇到问题或有建议？欢迎：
+
+- 📝 提 [Issue](https://github.com/WUHINS/astrbot_plugin_cosplay_saver/issues)
+- 💬 加入 AstrBot 交流群讨论
+- ⭐ 给项目一个 Star 支持
+
+---
+
+## 📝 更新日志
+
+### v1.1.0 (2026-03-13)
+- ✨ **新增 SMTP 邮件推送功能**
+  - 每日定时发送统计日报
+  - 支持 HTML 和纯文本格式
+  - 支持多个邮箱服务商
+- ✨ **新增忽略 GIF 选项**
+  - 可配置跳过所有 GIF 图片
+  - 减少识别费用和时间
+- 🐛 修复已知问题
+- 📚 完善文档
+
+### v1.0.0 (2026-03-12)
+- 🎉 初始版本发布
+- ✨ 女装图片 AI 识别和自动保存
+- ✨ 支持多模型轮询
+- ✨ 宽松判断策略
+- ✨ 自动分类保存
+
+---
 
 ## 📄 许可证
 
-本项目基于 [MIT](LICENSE) 许可证开源。
+MIT License
+
+Copyright (c) 2026 nagatoquin33
+
+详见 [LICENSE](LICENSE) 文件。
+
+---
+
+## 👥 作者
+
+**WUHINS**
+
+- GitHub: [@WUHINS](https://github.com/WUHINS)
+- 项目：[astrbot_plugin_cosplay_saver](https://github.com/WUHINS/astrbot_plugin_cosplay_saver)
+
+---
+
+## 🙏 致谢
+
+- [AstrBot](https://github.com/Soulter/AstrBot) - 强大的聊天机器人框架
+- [Pillow](https://python-pillow.org/) - Python 图像处理库
+- 所有贡献者和使用者
 
 ---
 
 <div align="center">
 
-好用的话给个 ⭐ Star 吧，谢谢大伙！
+**⚠️ 免责声明**
 
-有问题欢迎提 [Issue](https://github.com/nagatoquin33/astrbot_plugin_stealer/issues) 或群里找我，一般很快会看到。
+本插件仅供学习和娱乐使用。
+
+请合理使用并遵守相关法律法规。
+
+尊重他人隐私，不要滥用此插件。
+
+---
+
+Made with ❤️ by WUHINS
 
 </div>
-
-
-
-
-
