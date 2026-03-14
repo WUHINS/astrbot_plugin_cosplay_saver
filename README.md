@@ -49,7 +49,7 @@
 ```bash
 # 1. 克隆或下载插件到 AstrBot 的 data/plugins 目录
 cd /path/to/AstrBot/data/plugins
-git clone https://github.com/nagatoquin33/astrbot_plugin_cosplay_saver.git
+git clone https://github.com/nagatoquin33/astrbot_plugin_cosplay_saver_26H3.git
 
 # 2. 安装依赖
 pip install -r astrbot_plugin_cosplay_saver/requirements.txt
@@ -316,7 +316,7 @@ astrbot_plugin_cosplay_saver/
 
 遇到问题或有建议？欢迎：
 
-- 📝 提 [Issue](https://github.com/WUHINS/astrbot_plugin_cosplay_saver/issues)
+- 📝 提 [Issue](https://github.com/WUHINS/astrbot_plugin_cosplay_saver_26H3/issues)
 - 💬 加入 AstrBot 交流群讨论
 - ⭐ 给项目一个 Star 支持
 
@@ -359,7 +359,7 @@ Copyright (c) 2026 nagatoquin33
 **WUHINS**
 
 - GitHub: [@WUHINS](https://github.com/WUHINS)
-- 项目：[astrbot_plugin_cosplay_saver](https://github.com/WUHINS/astrbot_plugin_cosplay_saver)
+- 项目：[astrbot_plugin_cosplay_saver](https://github.com/WUHINS/astrbot_plugin_cosplay_saver_26H3)
 
 ---
 
